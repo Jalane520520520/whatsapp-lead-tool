@@ -1,19 +1,19 @@
 ﻿; Inno Setup 6（免费，GitHub 的 Windows 机器上自带）把 dist\pkg 打成 一个安装程序.exe。PLAN v1.4 第 4 步。
-; 编译：iscc /DVer=1.0.0 build\installer.iss
-#ifndef Ver
-  #define Ver "0.0.0"
+; 编译：iscc /DAppVer=1.0.0 build\installer.iss
+#ifndef AppVer
+  #define AppVer "0.0.0"
 #endif
 [Setup]
 AppId={{6B0D7C55-2B9E-4C2E-9A61-3C1E1A7F4B21}
 AppName=WhatsApp客户提取
-AppVersion={#Ver}
+AppVersion={#AppVer}
 AppPublisher=Jalane
 ; 安装路径只用英文：中文路径在部分 Python / Node 工具里会出错
 DefaultDirName={autopf}\WhatsAppLeadTool
 DefaultGroupName=WhatsApp客户提取
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=WhatsApp客户提取-安装程序-{#Ver}
+OutputBaseFilename=WhatsApp客户提取-安装程序-{#AppVer}
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible

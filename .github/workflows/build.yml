@@ -27,7 +27,7 @@ jobs:
           $v = (Get-Content VERSION -Raw).Trim()
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE) { throw 'innosetup install failed' } }
-          & $iscc "/DVer=$v" build\installer.iss
+          & $iscc "/DAppVer=$v" build\installer.iss
           if ($LASTEXITCODE) { throw 'iscc failed' }
       - name: 静默安装 + 真跑 1 格（不登录 WhatsApp）
         shell: pwsh

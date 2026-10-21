@@ -56,3 +56,7 @@ if ($LASTEXITCODE) { throw 'app.zip failed' }
 
 $size = (Get-ChildItem $PKG -Recurse | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("pkg ready: v{0}, {1:N0} MB" -f $V, $size)
+# 每个零件多大（找安装包太大的原因）
+Get-ChildItem $PKG -Directory | ForEach-Object { '{0,8:N0} MB  {1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }
+Get-ChildItem "$PKG\python\Lib\site-packages" -Directory | ForEach-Object { [pscustomobject]@{MB=[math]::Round((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB); Name=$_.Name} } | Sort-Object MB -Descending | Select-Object -First 15 | Format-Table -AutoSize | Out-String | Write-Host
+Get-ChildItem "$PKG\browsers" -Directory | ForEach-Object { '{0,8:N0} MB  browsers\{1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }
