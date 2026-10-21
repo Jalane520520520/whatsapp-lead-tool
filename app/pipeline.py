@@ -40,7 +40,7 @@ def run_tee(cmd, cwd=None, quiet=False):
     for line in p.stdout:
         if "SIGTRAP" in line or "Target page, context or browser has been closed" in line or "target closed" in line.lower():
             crashes += 1
-        if not quiet: print(line.rstrip()[:300], flush=True)
+        if not quiet or os.environ.get("WAT_VERBOSE"): print(line.rstrip()[:300], flush=True)
     rc = p.wait(); CHILD = None
     return rc, crashes
 
