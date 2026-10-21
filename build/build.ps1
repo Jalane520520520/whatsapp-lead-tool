@@ -65,8 +65,7 @@ $env:PLAYWRIGHT_INSTALL_ONLY = '1'
 if ($LASTEXITCODE) { throw 'gosom playwright install failed' }
 Remove-Item Env:PLAYWRIGHT_INSTALL_ONLY
 if (-not (Test-Path "$PKG\pw-driver")) { throw 'gosom driver not in package' }
-# 瘦身 C：gosom 无界面运行用 chromium_headless_shell-1228；完整版 chromium-1228（415 MB）只在有界面时用。删掉后由下面安装测试的「>0 家」验证
-Remove-Item -Recurse -Force "$PKG\browsers\chromium-1228" -ErrorAction SilentlyContinue
+# 不删 chromium-1228 完整版：gosom 每次启动都检查它在不在，不在就从 cdn.playwright.dev 重新下载（10-21 run 39547391421 实测）
 
 # 6. 出厂代码 + 启动器
 $CODE = 'VERSION', 'app', 'maps', 'web', 'wa_check'
