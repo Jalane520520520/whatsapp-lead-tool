@@ -25,7 +25,7 @@ if ($LASTEXITCODE) { throw 'pip install failed' }
 
 # 3. 浏览器：用 playwright 装它自己要的那个 Chromium 版本，放进包里的 browsers\
 $env:PLAYWRIGHT_BROWSERS_PATH = "$PKG\browsers"
-& "$PKG\python\python.exe" -m playwright install chromium
+& "$PKG\python\python.exe" -m playwright install chromium-headless-shell   # 查官网只用无界面版；完整版 432 MB 不装
 if ($LASTEXITCODE) { throw 'playwright install failed' }
 
 # 4. 便携 Node v24.22.0（nodejs.org 官方 zip）+ Baileys（npm ci 按 package-lock.json 装，版本和 Mac 上一样）

@@ -42,11 +42,17 @@ jobs:
           $env:PYTHONIOENCODING = 'utf-8'
           & C:\WLT\python\python.exe -c "import webview, crawl4ai, flask, openpyxl; print('imports ok')"
           if ($LASTEXITCODE) { throw 'imports failed' }
-          & C:\WLT\python\python.exe C:\WLT\app_builtin\app\pipeline.py --keywords "chinese supermarket" --country GB --cells 1
+          # 3 格 London#1-3：Mac 实测 #1=0 家、#2=2 家，所以必须抓到 >0 家才算谷歌地图在 Windows 上真能用
+          & C:\WLT\python\python.exe C:\WLT\app_builtin\app\pipeline.py --keywords "chinese supermarket" --country GB --cells 3 | Tee-Object -Variable out
           if ($LASTEXITCODE -gt 2) { throw "pipeline exit $LASTEXITCODE" }
+          $done = ($out | Select-String 'DONE (.*)').Matches[0].Groups[1].Value | ConvertFrom-Json
+          if ($done.businesses -lt 1) { throw "谷歌地图 0 家：Windows 上地图这一步没真跑通" }
           $x = Get-ChildItem "$env:USERPROFILE\Documents\WhatsApp客户提取\表格\*.xlsx"
           if (-not $x) { throw '没有生成 Excel' }
-          Write-Host "Excel OK: $($x.Name)"
+          Write-Host "OK: $($done.businesses) 家, Excel $($x.Name)"
+          # gosom 的浏览器放在哪（判断客户第一次运行要不要从国外下载）
+          foreach ($d in 'C:\WLT\browsers', "$env:LOCALAPPDATA\ms-playwright", "$env:LOCALAPPDATA\ms-playwright-go", "$env:USERPROFILE\AppData\Local\ms-playwright-go") {
+            if (Test-Path $d) { Get-ChildItem $d -Directory | ForEach-Object { Write-Host "BROWSER $d\$($_.Name)" } } }
       - uses: actions/upload-artifact@v4
         with:
           name: installer
