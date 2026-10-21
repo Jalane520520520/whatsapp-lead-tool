@@ -7,9 +7,11 @@ Usage: run_maps.py --keyword "hot pot base supplier" --country GB --out out.csv
 import argparse, csv, json, math, os, platform, subprocess, sys, time
 import phonenumbers
 from phonenumbers import PhoneNumberType as T
-import playwright_maps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:  # Windows embeddable Python uses an isolated ._pth
+    sys.path.insert(0, HERE)
+import playwright_maps
 COLS = ["name", "phone_e164", "phone_type", "website", "address", "category",
         "latitude", "longitude", "maps_link", "place_id"]
 

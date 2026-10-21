@@ -51,6 +51,8 @@ foreach ($c in $CODE) { Copy-Item -Recurse $c "$PKG\app_builtin\" }
 New-Item -ItemType Directory -Force "$PKG\app_builtin\maps" | Out-Null
 Copy-Item -Force "maps\playwright_maps.py" "$PKG\app_builtin\maps\playwright_maps.py"
 if (-not (Test-Path "$PKG\app_builtin\maps\playwright_maps.py")) { throw 'playwright_maps.py missing from package' }
+& "$PKG\python\python.exe" "$PKG\app_builtin\maps\run_maps.py" --help | Out-Null
+if ($LASTEXITCODE) { throw 'packaged run_maps.py import check failed' }
 Remove-Item -Recurse -Force "$PKG\app_builtin\wa_check\node_modules" -ErrorAction SilentlyContinue
 Copy-Item launcher.py "$PKG\"
 
