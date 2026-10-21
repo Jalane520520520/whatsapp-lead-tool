@@ -38,9 +38,27 @@ if ($LASTEXITCODE) { Pop-Location; throw 'npm ci failed' }
 Pop-Location
 Move-Item wa_check\node_modules "$PKG\node_modules"
 
-# 5. gosom（谷歌地图）官方 Windows 版 v1.18.1
+# 5. gosom（谷歌地图）v1.18.1，从源码编译 + 打 Windows 补丁（PLAN v1.11）：
+#    scrapemate v1.4.0 启动 Chromium 写死了 --single-process/--no-zygote，Windows 上页面一开就关（官方 exe 每格 0 家）。
+#    补丁只在 Windows 上去掉这几个参数；GitHub Windows 实测 London#2 10/10 过。需要 Go（build.yml 里 setup-go）。
+git clone --quiet --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git "$TMP\gosom-src"
+git clone --quiet --depth 1 --branch v1.4.0 https://github.com/gosom/scrapemate.git "$TMP\scrapemate-src"
+git -C "$TMP\scrapemate-src" apply "$PWD\build\scrapemate-winargs.patch"
+if ($LASTEXITCODE) { throw 'scrapemate patch failed' }
 New-Item -ItemType Directory -Force "$PKG\gosom" | Out-Null
-Get 'https://github.com/gosom/google-maps-scraper/releases/download/v1.18.1/google_maps_scraper-1.18.1-windows-amd64.exe' "$PKG\gosom\google_maps_scraper-1.18.1-windows-amd64.exe"
+Push-Location "$TMP\gosom-src"
+go mod edit "-replace=github.com/gosom/scrapemate=$TMP\scrapemate-src"
+go mod tidy
+go build -o "$PKG\gosom\gosom-1.18.1-winargs.exe" .
+if ($LASTEXITCODE) { Pop-Location; throw 'gosom build failed' }
+Pop-Location
+# gosom 自己的驱动和 Chromium 也装进包（否则客户第一次运行要从 cdn.playwright.dev 下载 ~114 MB，国内可能失败）
+$env:PLAYWRIGHT_DRIVER_PATH = "$PKG\pw-driver"
+$env:PLAYWRIGHT_INSTALL_ONLY = '1'
+& "$PKG\gosom\gosom-1.18.1-winargs.exe"
+if ($LASTEXITCODE) { throw 'gosom playwright install failed' }
+Remove-Item Env:PLAYWRIGHT_INSTALL_ONLY
+if (-not (Test-Path "$PKG\pw-driver")) { throw 'gosom driver not in package' }
 
 # 6. 出厂代码 + 启动器
 $CODE = 'VERSION', 'app', 'maps', 'web', 'wa_check'

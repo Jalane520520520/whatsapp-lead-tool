@@ -14,6 +14,10 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: 标签和 VERSION 必须一致
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -37,11 +41,12 @@ jobs:
           $env:WAT_HOME = "$env:LOCALAPPDATA\WhatsApp客户提取"
           $env:WAT_NODE = 'C:\WLT\node\node.exe'
           $env:WAT_NODE_MODULES = 'C:\WLT\node_modules'
-          $env:WAT_GOSOM = 'C:\WLT\gosom\google_maps_scraper-1.18.1-windows-amd64.exe'
+          $env:WAT_GOSOM = 'C:\WLT\gosom\gosom-1.18.1-winargs.exe'
+          $env:PLAYWRIGHT_DRIVER_PATH = 'C:\WLT\pw-driver'
           $env:PLAYWRIGHT_BROWSERS_PATH = 'C:\WLT\browsers'
           $env:PYTHONIOENCODING = 'utf-8'
           $env:WAT_VERBOSE = '1'   # 把 gosom 自己的输出打出来，出错时看得到原因
-          if (-not (Test-Path 'C:\WLT\app_builtin\maps\playwright_maps.py')) { throw 'playwright_maps.py 没装进去' }
+          if (-not (Test-Path 'C:\WLT\pw-driver')) { throw 'gosom 驱动没装进去' }
           & C:\WLT\python\python.exe -c "import webview, crawl4ai, flask, openpyxl; print('imports ok')"
           if ($LASTEXITCODE) { throw 'imports failed' }
           # 3 格 London#1-3：Mac 实测 #1=0 家、#2=2 家，所以必须抓到 >0 家才算谷歌地图在 Windows 上真能用
@@ -49,6 +54,8 @@ jobs:
           if ($LASTEXITCODE -gt 2) { throw "pipeline exit $LASTEXITCODE" }
           $done = ($out | Select-String 'DONE (.*)').Matches[0].Groups[1].Value | ConvertFrom-Json
           if ($done.businesses -lt 1) { throw "谷歌地图 0 家：Windows 上地图这一步没真跑通" }
+          if (-not ($out | Select-String 'engine=gosom')) { throw '没有用 gosom 引擎' }
+          if ($out | Select-String 'Downloading driver|Downloading Chrome') { throw '第一次运行还在从网上下载驱动/浏览器' }
           $x = Get-ChildItem "$env:USERPROFILE\Documents\WhatsApp客户提取\表格\*.xlsx"
           if (-not $x) { throw '没有生成 Excel' }
           Write-Host "OK: $($done.businesses) 家, Excel $($x.Name)"

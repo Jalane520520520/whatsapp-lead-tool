@@ -1,0 +1,48 @@
+diff --git a/adapters/fetchers/jshttp/jshttp.go b/adapters/fetchers/jshttp/jshttp.go
+index 2ced968..46575eb 100644
+--- a/adapters/fetchers/jshttp/jshttp.go
++++ b/adapters/fetchers/jshttp/jshttp.go
+@@ -321,6 +321,8 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
+ 		opts.Args = append(opts.Args, `--blink-settings=imagesEnabled=false`)
+ 	}
+ 
++	opts.Args = platformArgs(opts.Args)
++
+ 	br, err := pw.Chromium.Launch(opts)
+ 	if err != nil {
+ 		return nil, err
+diff --git a/adapters/fetchers/jshttp/winargs.go b/adapters/fetchers/jshttp/winargs.go
+new file mode 100644
+index 0000000..31fc12f
+--- /dev/null
++++ b/adapters/fetchers/jshttp/winargs.go
+@@ -0,0 +1,29 @@
++package jshttp
++
++import (
++	"runtime"
++	"strings"
++)
++
++// platformArgs drops Chromium flags that are Linux-only or unsupported on Windows.
++// --single-process is a debug-only mode; on Windows it closes pages right after they
++// open ("Target page, context or browser has been closed"), which gosom then reports
++// as "unexpected page type". --no-zygote is a Linux process-launch flag, and
++// NetworkServiceInProcess forces the same single-process networking.
++func platformArgs(args []string) []string {
++	if runtime.GOOS != "windows" {
++		return args
++	}
++
++	out := make([]string, 0, len(args))
++
++	for _, a := range args {
++		if a == "--single-process" || a == "--no-zygote" || strings.Contains(a, "NetworkServiceInProcess") {
++			continue
++		}
++
++		out = append(out, a)
++	}
++
++	return out
++}

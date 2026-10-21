@@ -74,8 +74,9 @@ def main():
         WAT_HOME=HOME,
         WAT_NODE=os.path.join(INSTALL, "node", "node.exe"),
         WAT_NODE_MODULES=os.path.join(INSTALL, "node_modules"),
-        WAT_GOSOM=os.path.join(INSTALL, "gosom", "google_maps_scraper-1.18.1-windows-amd64.exe"),
+        WAT_GOSOM=os.path.join(INSTALL, "gosom", "gosom-1.18.1-winargs.exe"),
         PLAYWRIGHT_BROWSERS_PATH=os.path.join(INSTALL, "browsers"),
+        PLAYWRIGHT_DRIVER_PATH=os.path.join(INSTALL, "pw-driver"),    # gosom 的驱动，打包时已装好
         WAT_VERSION=v)
     sys.path.insert(0, os.path.join(code, "app"))
     sys.argv = [os.path.join(code, "app", "main.py")]

@@ -88,7 +88,7 @@ def main():
     zoom = a.zoom or default_zoom(a.cell_km)
     cells = grid_cells(bbox, a.cell_km)
     t0 = time.time()
-    engine = "playwright" if a.engine == "auto" and platform.system() == "Windows" else a.engine
+    engine = "gosom" if a.engine == "auto" else a.engine   # 用户 10-21 定：用 gosom（Windows 用打了 winargs 补丁的版本）
     if engine == "playwright":
         print(f"engine=playwright cells~{cells} zoom={zoom} bbox={bbox}", flush=True)
         rows = playwright_maps.collect_sync(a.keyword, bbox, zoom, a.depth)
