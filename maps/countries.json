@@ -1,0 +1,180 @@
+{
+ "_source": "https://github.com/sandstrom/country-bounding-boxes (bounding-boxes.json, Natural Earth derived). Source order [minLon,minLat,maxLon,maxLat]; stored here as named fields.",
+ "_overrides": "override=true entries are not in the source file and were hand-set from known extents (SG only).",
+ "GB": {
+  "name": "United Kingdom",
+  "min_lat": 49.96,
+  "min_lon": -7.57,
+  "max_lat": 58.64,
+  "max_lon": 1.68,
+  "override": false
+ },
+ "US": {
+  "name": "United States",
+  "min_lat": 25.0,
+  "min_lon": -125.0,
+  "max_lat": 49.5,
+  "max_lon": -66.96,
+  "override": false
+ },
+ "AU": {
+  "name": "Australia",
+  "min_lat": -43.63,
+  "min_lon": 113.34,
+  "max_lat": -10.67,
+  "max_lon": 153.57,
+  "override": false
+ },
+ "DE": {
+  "name": "Germany",
+  "min_lat": 47.3,
+  "min_lon": 5.99,
+  "max_lat": 54.98,
+  "max_lon": 15.02,
+  "override": false
+ },
+ "FR": {
+  "name": "France",
+  "min_lat": 42.5,
+  "min_lon": -5.0,
+  "max_lat": 51.15,
+  "max_lon": 9.56,
+  "override": false
+ },
+ "MY": {
+  "name": "Malaysia",
+  "min_lat": 0.77,
+  "min_lon": 100.09,
+  "max_lat": 6.93,
+  "max_lon": 119.18,
+  "override": false
+ },
+ "SG": {
+  "name": "Singapore",
+  "min_lat": 1.16,
+  "min_lon": 103.6,
+  "max_lat": 1.48,
+  "max_lon": 104.09,
+  "override": true
+ },
+ "AE": {
+  "name": "United Arab Emirates",
+  "min_lat": 22.5,
+  "min_lon": 51.58,
+  "max_lat": 26.06,
+  "max_lon": 56.4,
+  "override": false
+ },
+ "SA": {
+  "name": "Saudi Arabia",
+  "min_lat": 16.35,
+  "min_lon": 34.63,
+  "max_lat": 32.16,
+  "max_lon": 55.67,
+  "override": false
+ },
+ "IN": {
+  "name": "India",
+  "min_lat": 7.97,
+  "min_lon": 68.18,
+  "max_lat": 35.49,
+  "max_lon": 97.4,
+  "override": false
+ },
+ "BR": {
+  "name": "Brazil",
+  "min_lat": -33.77,
+  "min_lon": -73.99,
+  "max_lat": 5.24,
+  "max_lon": -34.73,
+  "override": false
+ },
+ "CA": {
+  "name": "Canada",
+  "min_lat": 41.68,
+  "min_lon": -141.0,
+  "max_lat": 73.23,
+  "max_lon": -52.65,
+  "override": false
+ },
+ "NZ": {
+  "name": "New Zealand",
+  "min_lat": -46.64,
+  "min_lon": 166.51,
+  "max_lat": -34.45,
+  "max_lon": 178.52,
+  "override": false
+ },
+ "IT": {
+  "name": "Italy",
+  "min_lat": 36.62,
+  "min_lon": 6.75,
+  "max_lat": 47.12,
+  "max_lon": 18.48,
+  "override": false
+ },
+ "ES": {
+  "name": "Spain",
+  "min_lat": 35.95,
+  "min_lon": -9.39,
+  "max_lat": 43.75,
+  "max_lon": 3.04,
+  "override": false
+ },
+ "NL": {
+  "name": "Netherlands",
+  "min_lat": 50.8,
+  "min_lon": 3.31,
+  "max_lat": 53.51,
+  "max_lon": 7.09,
+  "override": false
+ },
+ "TH": {
+  "name": "Thailand",
+  "min_lat": 5.69,
+  "min_lon": 97.38,
+  "max_lat": 20.42,
+  "max_lon": 105.59,
+  "override": false
+ },
+ "VN": {
+  "name": "Vietnam",
+  "min_lat": 8.6,
+  "min_lon": 102.17,
+  "max_lat": 23.35,
+  "max_lon": 109.34,
+  "override": false
+ },
+ "ID": {
+  "name": "Indonesia",
+  "min_lat": -10.36,
+  "min_lon": 95.29,
+  "max_lat": 5.48,
+  "max_lon": 141.03,
+  "override": false
+ },
+ "PH": {
+  "name": "Philippines",
+  "min_lat": 5.58,
+  "min_lon": 117.17,
+  "max_lat": 18.51,
+  "max_lon": 126.54,
+  "override": false
+ },
+ "JP": {
+  "name": "Japan",
+  "min_lat": 31.03,
+  "min_lon": 129.41,
+  "max_lat": 45.55,
+  "max_lon": 145.54,
+  "override": false
+ },
+ "KR": {
+  "name": "South Korea",
+  "min_lat": 34.39,
+  "min_lon": 126.12,
+  "max_lat": 38.61,
+  "max_lon": 129.47,
+  "override": false
+ }
+}

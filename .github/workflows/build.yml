@@ -1,0 +1,62 @@
+# 推一个 v* 标签 -> GitHub 免费 Windows 机器：打包 -> 静默安装 -> 真跑 1 格 -> 过了才发布 Release（安装程序 + app.zip）。
+# 只是推代码（不打标签）时：只打包和测试，不发布。PLAN v1.4 第 4 步。
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: 标签和 VERSION 必须一致
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: if ("v$((Get-Content VERSION -Raw).Trim())" -ne "${{ github.ref_name }}") { throw "VERSION 和标签不一致" }
+      - name: 打包零件
+        shell: pwsh
+        run: ./build/build.ps1
+      - name: 做安装程序
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION -Raw).Trim()
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE) { throw 'innosetup install failed' } }
+          & $iscc "/DVer=$v" build\installer.iss
+          if ($LASTEXITCODE) { throw 'iscc failed' }
+      - name: 静默安装 + 真跑 1 格（不登录 WhatsApp）
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist\*.exe | Select-Object -First 1
+          Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/DIR=C:\WLT' -Wait
+          $env:WAT_HOME = "$env:LOCALAPPDATA\WhatsApp客户提取"
+          $env:WAT_NODE = 'C:\WLT\node\node.exe'
+          $env:WAT_NODE_MODULES = 'C:\WLT\node_modules'
+          $env:WAT_GOSOM = 'C:\WLT\gosom\google_maps_scraper-1.18.1-windows-amd64.exe'
+          $env:PLAYWRIGHT_BROWSERS_PATH = 'C:\WLT\browsers'
+          $env:PYTHONIOENCODING = 'utf-8'
+          & C:\WLT\python\python.exe -c "import webview, crawl4ai, flask, openpyxl; print('imports ok')"
+          if ($LASTEXITCODE) { throw 'imports failed' }
+          & C:\WLT\python\python.exe C:\WLT\app_builtin\app\pipeline.py --keywords "chinese supermarket" --country GB --cells 1
+          if ($LASTEXITCODE -gt 2) { throw "pipeline exit $LASTEXITCODE" }
+          $x = Get-ChildItem "$env:USERPROFILE\Documents\WhatsApp客户提取\表格\*.xlsx"
+          if (-not $x) { throw '没有生成 Excel' }
+          Write-Host "Excel OK: $($x.Name)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: |
+            dist/*.exe
+            dist/app.zip
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.exe
+            dist/app.zip

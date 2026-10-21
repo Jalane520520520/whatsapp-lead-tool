@@ -1,0 +1,162 @@
+<!doctype html><html lang=zh><head><meta charset=utf-8><title>WhatsApp 客户提取</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f5f7f8;font-family:"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;color:#1f1f1f}
+.body{padding:22px 28px;max-width:1100px;margin:0 auto}
+.bar{display:flex;align-items:center;gap:10px;position:relative}
+/* Google search box + suggestions (measured on google.com 10-21) */
+.sb{flex:1;position:relative;height:52px}
+.sbox{position:absolute;left:0;right:0;top:0;background:#fff;border:1px solid #dadce0;border-radius:26px;box-shadow:0 3px 10px rgba(31,31,31,.08);z-index:9;font-family:Arial,"Microsoft YaHei",sans-serif}
+.sbox.open{z-index:20;border-color:transparent;border-radius:26px;box-shadow:0 2px 8px 1px rgba(64,60,67,.24)}
+.sin{height:50px;display:flex;align-items:center;padding:0 14px 0 14px}
+.sin input{border:0;outline:0;flex:1;font:16px Arial,"Microsoft YaHei",sans-serif;color:#212121;background:transparent;margin-left:12px}
+.sin .ic{width:20px;height:20px;fill:#9aa0a6;flex:none}
+.sug{display:none;padding-bottom:4px}.sbox.open .sug{display:block}
+.sep{border-top:1px solid #dadce0;margin:0 20px 0 14px}
+.li{height:30px;display:flex;align-items:center;padding:0 20px 0 14px;cursor:pointer;font-size:16px;color:#212121}
+.li.hl{background:#f3f5f6}
+.li .ic{width:20px;height:20px;fill:#9aa0a6;flex:none;margin-right:12px}
+.li .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.li .t b{font-weight:700}
+.li .m{font-size:13px;color:#70757a;margin-left:12px}
+.li .x{font-size:13px;color:#70757a;margin-left:14px;visibility:hidden}.li.hl .x{visibility:visible}.li .x:hover{text-decoration:underline}
+.sfoot{display:flex;justify-content:flex-end;padding:6px 20px 8px;font-size:12px;color:#70757a}.sfoot span{cursor:pointer}.sfoot span:hover{text-decoration:underline}
+/* Apple buttons (measured on apple.com 10-21): instant colour swap, no transition */
+.go,.btn,.btn2{font:17px "SF Pro Text","Helvetica Neue","Microsoft YaHei",sans-serif;letter-spacing:-.374px;border-radius:980px;padding:11px 21px;border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.go,.btn{background:#0071e3;color:#fff}.go:hover,.btn:hover{background:#0076df}
+.btn2:disabled,.btn2:disabled:hover{border-color:#d2d2d7;background:#e8e8ed;color:#86868b;cursor:default}
+.btn2{background:transparent;color:#0066cc;border-color:#0066cc}.btn2:hover{background:#0076df;color:#fff;border-color:transparent}
+.go:focus-visible,.btn:focus-visible,.btn2:focus-visible{outline:2px solid #0071e3;outline-offset:3px}
+.lab{flex:none;white-space:nowrap;font:14px Arial,"Microsoft YaHei",sans-serif;color:#70757a;margin-left:6px}
+#cbox .sin input,#nbox .sin input{margin-left:8px;min-width:0}
+#nbox .sin input{flex:none;width:3ch;text-align:center;margin:0 2px 0 6px}
+#clist{max-height:390px;overflow-y:auto}
+.li .m{flex:none}
+.chip{appearance:none;-webkit-appearance:none;height:52px;background:#fff;border:1px solid #dadce0;border-radius:26px;box-shadow:0 3px 10px rgba(31,31,31,.08);padding:0 20px;font:16px Arial,"Microsoft YaHei",sans-serif;color:#212121;cursor:pointer}
+.cols{display:flex;gap:22px;margin-top:22px}
+.card{background:#fff;border-radius:12px;padding:20px}
+.st{display:flex;gap:12px;margin-bottom:20px;font-size:16px}
+.dot{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;font-size:14px}
+.d1{background:#e6f4ff;color:#1677ff}.d2{background:#1677ff;color:#fff}.d3{background:#f5f5f5;color:#999}
+.small{font-size:14px;color:#888}
+.row{padding:12px 18px;border-top:1px solid #e8eaed}.row .n{font-size:16px;font-weight:500}.row .c{font-size:14px;color:#5f6368}.row .w{font-size:14px;color:#188038}
+.wa{display:inline-block;background:#e7f8ee;color:#188038;border-radius:12px;padding:3px 10px;font-size:13px}
+.login{margin:26px auto 0;width:820px;background:#fff;border:1px solid #111;border-radius:24px;padding:36px 44px;display:flex;gap:30px}
+.num{width:24px;height:24px;border:1px solid #111;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;margin-right:12px}
+.ul{font-size:14px;border-bottom:2px solid #25d366;cursor:pointer;white-space:nowrap}
+.warn{background:#fff4e5;color:#8a4b00;border-radius:8px;padding:10px 14px;margin-top:14px;font-size:14px}
+.pin{border:1px solid #ccc;border-radius:6px;height:38px;padding:0 10px;font:inherit;font-size:15px;width:230px}
+.code{font-size:30px;letter-spacing:6px;font-weight:600;margin:10px 0}
+</style></head><body><div class=body>
+
+<div class=bar>
+ <div class=sb><div id=sbox class=sbox>
+  <div class=sin><svg class=ic viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+   <input id=kw placeholder="产品关键词（英文），例如 chinese supermarket" autocomplete=off spellcheck=false></div>
+  <div class=sug><div class=sep></div><div id=hl></div><div class=sfoot><span onclick="openIt({what:'folder'});closeDrop();kw.blur()">打开存表格的文件夹</span></div></div>
+ </div></div>
+ <div class=sb style="flex:0 0 170px"><div id=cbox class=sbox><div class=sin><span class=lab>国家</span><input id=ccIn autocomplete=off spellcheck=false></div>
+  <div class=sug><div class=sep></div><div id=clist></div><div style="height:6px"></div></div></div></div>
+ <div class=sb style="flex:0 0 150px"><div id=nbox class=sbox><div class=sin><span class=lab>本次</span><input id=nIn autocomplete=off value=3 style="width:40px"><span class=lab style="margin:0 6px 0 0">格</span></div>
+  <div class=sug><div class=sep></div><div id=nlist></div><div style="height:6px"></div></div></div></div>
+ <button id=go class=btn2 onclick=start()>开始抓取</button>
+</div>
+<div id=sub class=sub></div>
+<div id=main></div>
+<div id=foot class=small style="margin-top:14px"></div>
+</div>
+<script>
+const COUNTRIES=__OPTS__;const cc={value:'GB'},ncells={value:'3'};
+const $=id=>document.getElementById(id), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let S={}, R=null, H=[], phoneMode=false, lastKey='';
+const post=(u,b)=>fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(r=>r.json());
+async function start(){const j=await post('/start',{keywords:kw.value,country:cc.value,cells:ncells.value});if(!j.ok)alert(j.error);else poll()}
+async function openIt(b){const j=await post('/open',b);if(!j.ok)alert(j.error)}
+async function curKey(){return (await (await fetch('/key?country='+cc.value+'&keywords='+encodeURIComponent(kw.value))).json()).key}
+async function loadResults(){if(!kw.value.trim()){R=null;render();return}
+ R=await (await fetch('/results?country='+cc.value+'&keywords='+encodeURIComponent(kw.value))).json();render()}
+// ---- history dropdown (Google-style)
+const CLK='<svg class=ic viewBox="0 0 24 24"><path d="M13 3a9 9 0 0 0-9 9H1l3.9 3.9L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>';
+let VIS=[],sel=-1;
+function boldTail(text,q){const t=text.toLowerCase().startsWith(q.toLowerCase())&&q?esc(text.slice(0,q.length))+'<b>'+esc(text.slice(q.length))+'</b>':esc(text);return t}
+async function openDrop(){H=await (await fetch('/history')).json();drawDrop()}
+function closeDrop(){sbox.classList.remove('open');sel=-1}
+function drawDrop(){const q=kw.value.trim();VIS=H.filter(h=>!q||h.keywords.toLowerCase().includes(q.toLowerCase()));
+ if(!VIS.length){closeDrop();return}
+ sbox.classList.add('open');if(sel>=VIS.length)sel=-1;
+ hl.innerHTML=VIS.map((h,i)=>`<div class="li${i==sel?' hl':''}" data-i=${i}>${CLK}<span class=t>${boldTail(h.keywords,q)}</span><span class=m>${esc(h.country)} · ${h.wa} 个 WhatsApp</span><span class=x data-hide=${i}>删除</span></div>`).join('')}
+function pick(i){const h=VIS[i];kw.value=h.keywords;setCC(h.cc);closeDrop();loadResults()}
+kw.addEventListener('focus',openDrop);kw.addEventListener('input',()=>{sel=-1;drawDrop()});
+kw.addEventListener('keydown',e=>{if(e.key=='ArrowDown'&&VIS.length){sel=(sel+1)%VIS.length;drawDrop();e.preventDefault()}
+ else if(e.key=='ArrowUp'&&VIS.length){sel=sel<=0?VIS.length-1:sel-1;drawDrop();e.preventDefault()}
+ else if(e.key=='Enter'){if(sel>=0)pick(sel);else{closeDrop();loadResults()}}
+ else if(e.key=='Escape')closeDrop()});
+hl.addEventListener('mousemove',e=>{const r=e.target.closest('.li');if(r&&+r.dataset.i!==sel){sel=+r.dataset.i;hl.querySelectorAll('.li').forEach((x,i)=>x.classList.toggle('hl',i==sel))}});
+hl.addEventListener('mousedown',async e=>{e.preventDefault();const t=e.target;
+ if(t.dataset.hide!==undefined){await post('/hide',{key:VIS[t.dataset.hide].key});H=H.filter(h=>h!==VIS[t.dataset.hide]);drawDrop();return}
+ const r=t.closest('.li');if(r)pick(+r.dataset.i)});
+kw.addEventListener('blur',()=>setTimeout(closeDrop,0));
+document.querySelectorAll('.sug').forEach(x=>x.addEventListener('mousedown',e=>e.preventDefault()));
+kw.addEventListener('change',loadResults);
+// ---- WhatsApp login
+async function login(phone){const j=await post('/login',phone?{phone}:{});if(!j.ok)alert(j.error);poll()}
+function loginCard(){
+ const right=phoneMode
+  ?(S.pair?`<div class=small>在备用手机上输入这个码：</div><div class=code>${esc(S.pair.slice(0,4))}-${esc(S.pair.slice(4))}</div><div class=small>WhatsApp → 已关联设备 → 关联新设备 → 用电话号码关联</div>`
+   :`<div class=small>备用 WhatsApp 号码（带国家区号）</div><input id=ph class=pin placeholder="+86 186 0000 0000"><br><button class=btn style="margin-top:12px" onclick="login(ph.value)">获取 8 位码</button>${S.login_running?'<div class=small style="margin-top:8px">正在获取…</div>':''}`)
+  :(S.qr?`<img src="/qr.png?${Math.floor(Date.now()/4000)}" width=170 height=170>`
+   :`<div style="width:170px;height:170px;display:flex;align-items:center;justify-content:center;background:#f5f5f5;border-radius:8px">${S.login_running?'<span class=small>二维码生成中…</span>':'<button class=btn onclick="login()">显示二维码</button>'}</div>`);
+ return `<div class=login><div style="flex:1"><div style="font-size:28px;margin-bottom:22px">先登录 WhatsApp</div>
+ <div style="font-size:16px;line-height:2.3"><div><span class=num>1</span>打开备用手机的 WhatsApp</div><div><span class=num>2</span>设置 → 已关联设备 → 关联新设备</div>
+ <div><span class=num>3</span>${phoneMode?'选「用电话号码关联」，输入右边的码':'扫右边的码'}</div></div>
+ <div style="margin-top:14px;font-size:14px">不登录也能抓：只拿官网上写的 WhatsApp</div></div>
+ <div style="width:240px">${right}<div style="margin-top:24px"><span class=ul onclick="phoneMode=!phoneMode;render()">${phoneMode?'改用扫码登录 ›':'用电话号码登录 ›'}</span></div></div></div>`}
+// ---- views
+function waRows(list,max){return list.slice(0,max).map(r=>`<div class=row><div class=n>${esc(r.name)}</div><div class=c>${esc([r.category,r.city].filter(Boolean).join(' · '))}${r.src=='官网'?' · 官网上写的':''}</div><div class=w>WhatsApp ${esc(r.wa)}</div></div>`).join('')}
+function step(n,cur,title,detail){const cls=cur>n?'d1':cur==n?'d2':'d3';return `<div class=st><span class="dot ${cls}">${cur>n?'✓':n}</span><div style="${cur<n?'color:#999':''}">${cur==n?'<b>'+title+'</b>':title}${detail?'<div class=small style="'+(cur==n?'color:#1f1f1f':'')+'">'+detail+'</div>':''}</div></div>`}
+function fmt(s){s=Math.max(0,s|0);return String(s/3600|0).padStart(2,'0')+':'+String(s/60%60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function render(){
+ const running=S.state=='running';go.disabled=running;go.textContent=running?'抓取中…':'开始抓取';
+ const sm=R&&R.sm;sub.textContent=sm?`已抓 ${sm.done} / ${sm.total.toLocaleString()} 格`+(sm.next_city?` · 下次从 ${sm.next_city} 第 ${sm.next_n} 格开始`:' · 全部抓完'):'';
+ foot.innerHTML='<span style="float:right;color:#b0b3b8">版本 '+esc(S.version)+'</span>WhatsApp：'+(S.me?`<span class=wa>已登录 ${esc(S.me)}</span>`:'未登录');
+ let h='';
+ if(!S.me&&!running) h=loginCard();
+ if(running){const c=S.step||1;
+  h+=`<div class=cols><div class=card style="flex:0 0 340px">`+
+  step(1,c,'谷歌地图',`${S.maps_i} / ${S.maps_n} 格 · 新增 ${S.new} 家`)+
+  step(2,c,'查官网'+(c==2&&S.web_left!=null?` <span class=small>剩余 ${fmt(S.web_left)}</span>`:''),c>=2?`第 ${S.web_i} / ${S.web_n} 个网站`:'等待')+
+  step(3,c,'WhatsApp 验证',c==3?(S.wa_n?`${S.wa_i} / ${S.wa_n} 个号码`:S.wa_note):c>3?(S.wa_note||`${S.wa_i} 个号码`):'等待')+
+  `<div style="margin-bottom:-20px">${step(4,c,'导出 Excel',c>4?'完成':'等待')}</div></div>
+  <div class=card style="flex:1;padding:0"><div style="padding:16px 18px;font-size:18px">已有结果 · ${R?R.wa.length:0} 个 WhatsApp</div>${R?waRows(R.wa,6):''}</div></div>`}
+ else if(R&&R.total){h+=`<div class=card style="padding:0;margin-top:22px"><div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px">
+  <span style="font-size:20px">结果 · ${R.wa.length} 个 WhatsApp <span class=small>/ 共 ${R.total} 家商家</span></span><button class=btn2 onclick=openCur()>打开 Excel</button></div>
+  ${waRows(R.wa,200)||'<div class="row c">这张表还没有 WhatsApp 号码，再抓几格试试</div>'}</div>`}
+ else if(S.me&&!running) h+=`<div class=card style="margin-top:22px;color:#5f6368">输入产品关键词，选国家，点「开始抓取」。点搜索框可以看到以前搜过的。</div>`;
+ if(S.state=='done'&&S.locked) h=`<div class=warn>Excel 正在被打开，这次结果另存为：${esc(S.locked)}。关掉 Excel 后下次会写回原表。</div>`+h;
+ if(S.state=='error') h=`<div class=warn>这次没跑完。已抓完的格子都已保存，再点一次会接着抓。</div>`+h;
+ main.innerHTML=h}
+async function openCur(){openIt({key:await curKey(),newest:true})}
+let lastState='';
+async function poll(){try{S=await (await fetch('/status')).json();
+ if(S.state=='running'&&S.kws&&!kw.value){kw.value=S.kws.join('; ');setCC(S.cc)}
+ if(S.state!=lastState||S.state=='running'){lastState=S.state;await loadResults()}else render()}catch(e){}}
+
+// ---- same Google dropdown for country and cells
+function combo(box,inp,list,items,onPick){let V=[],k=-1;
+ const draw=()=>{V=items(inp.value.trim());if(!V.length){box.classList.remove('open');return}box.classList.add('open');if(k>=V.length)k=-1;
+  list.innerHTML=V.map((v,i)=>`<div class="li${i==k?' hl':''}" data-i=${i}><span class=t>${v.html}</span>${v.meta?'<span class=m>'+v.meta+'</span>':''}</div>`).join('')};
+ const close=()=>{box.classList.remove('open');k=-1};
+ inp.addEventListener('focus',()=>{inp.select();draw()});inp.addEventListener('input',()=>{k=-1;draw()});
+ inp.addEventListener('keydown',e=>{if(e.key=='ArrowDown'&&V.length){k=(k+1)%V.length;draw();e.preventDefault()}
+  else if(e.key=='ArrowUp'&&V.length){k=k<=0?V.length-1:k-1;draw();e.preventDefault()}
+  else if(e.key=='Enter'){onPick(k>=0?V[k]:V[0]||null,inp.value.trim());close();inp.blur()}else if(e.key=='Escape'){close();inp.blur()}});
+ list.addEventListener('mousemove',e=>{const r=e.target.closest('.li');if(r&&+r.dataset.i!==k){k=+r.dataset.i;list.querySelectorAll('.li').forEach((x,i)=>x.classList.toggle('hl',i==k))}});
+ list.addEventListener('mousedown',e=>{e.preventDefault();const r=e.target.closest('.li');if(r){onPick(V[+r.dataset.i]);close();inp.blur()}});
+ inp.addEventListener('blur',()=>{setTimeout(close,0);onPick(null,null,true)})}
+function setCC(code){const c=COUNTRIES.find(x=>x[0]==code);if(!c)return;cc.value=code;ccIn.value=c[1]}
+combo(cbox,ccIn,clist,q=>COUNTRIES.filter(c=>!q||q==COUNTRIES.find(x=>x[0]==cc.value)[1]||c[1].includes(q)||c[2].toLowerCase().includes(q.toLowerCase())).map(c=>({html:boldTail(c[1],q),code:c[0]})),
+ (v,raw,blur)=>{if(blur){setCC(cc.value);return}if(v){const ch=v.code!=cc.value;setCC(v.code);if(ch)loadResults()}});
+combo(nbox,nIn,nlist,q=>[1,3,10,30,100].map(String).filter(n=>!q||q==ncells.value||n.startsWith(q)).map(n=>({html:boldTail(n,q==ncells.value?'':q)+' 格',n})),
+ (v,raw,blur)=>{if(blur){nIn.value=ncells.value;return}const n=v?v.n:raw;if(/^\d+$/.test(n||'')&&+n>=1){ncells.value=String(Math.min(+n,5000))}nIn.value=ncells.value});
+setCC('GB');
+setInterval(poll,2000);poll();
+</script></body></html>

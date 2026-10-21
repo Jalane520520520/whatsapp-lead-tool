@@ -1,0 +1,7 @@
+# 版本锁死：客户电脑上和我们测过的完全一样（10-20 Mac 上浏览器版本不对就崩过一次）
+pywebview==6.2.1
+crawl4ai==0.9.5
+playwright==1.63.0
+Flask==3.1.0
+openpyxl==3.1.5
+phonenumbers==9.0.41

@@ -1,0 +1,14 @@
+# 永远不进仓库：数据、表格、登录信息、缓存、构建产物
+data/
+runs/
+表格/
+wa_check/auth/
+wa_check/cache.jsonl
+wa_check/qr.png
+wa_check/pair_code.txt
+wa_check/login.log
+wa_check/node_modules/
+dist/
+__pycache__/
+*.bak*
+.DS_Store
