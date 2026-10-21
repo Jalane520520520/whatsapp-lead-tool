@@ -46,6 +46,11 @@ Get 'https://github.com/gosom/google-maps-scraper/releases/download/v1.18.1/goog
 $CODE = 'VERSION', 'app', 'maps', 'web', 'wa_check'
 New-Item -ItemType Directory -Force "$PKG\app_builtin" | Out-Null
 foreach ($c in $CODE) { Copy-Item -Recurse $c "$PKG\app_builtin\" }
+# run_maps.py imports this sibling at process start. Keep the dependency explicit
+# and fail before the expensive installer compression if packaging ever drops it.
+New-Item -ItemType Directory -Force "$PKG\app_builtin\maps" | Out-Null
+Copy-Item -Force "maps\playwright_maps.py" "$PKG\app_builtin\maps\playwright_maps.py"
+if (-not (Test-Path "$PKG\app_builtin\maps\playwright_maps.py")) { throw 'playwright_maps.py missing from package' }
 Remove-Item -Recurse -Force "$PKG\app_builtin\wa_check\node_modules" -ErrorAction SilentlyContinue
 Copy-Item launcher.py "$PKG\"
 

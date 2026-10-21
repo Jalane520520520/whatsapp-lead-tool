@@ -41,6 +41,7 @@ jobs:
           $env:PLAYWRIGHT_BROWSERS_PATH = 'C:\WLT\browsers'
           $env:PYTHONIOENCODING = 'utf-8'
           $env:WAT_VERBOSE = '1'   # 把 gosom 自己的输出打出来，出错时看得到原因
+          if (-not (Test-Path 'C:\WLT\app_builtin\maps\playwright_maps.py')) { throw 'playwright_maps.py 没装进去' }
           & C:\WLT\python\python.exe -c "import webview, crawl4ai, flask, openpyxl; print('imports ok')"
           if ($LASTEXITCODE) { throw 'imports failed' }
           # 3 格 London#1-3：Mac 实测 #1=0 家、#2=2 家，所以必须抓到 >0 家才算谷歌地图在 Windows 上真能用
