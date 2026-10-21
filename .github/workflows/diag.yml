@@ -1,0 +1,47 @@
+# PLAN v1.5 实验：同一时间、同一格（London#2，Mac 上 = 2 家），Windows 版 vs Linux 版 gosom；再截图看谷歌给了什么页。
+name: diag
+on: workflow_dispatch
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install phonenumbers==9.0.41 playwright==1.63.0 && python -m playwright install --with-deps chromium
+        shell: bash
+      - name: gosom 跑 London#2
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then f=google_maps_scraper-1.18.1-windows-amd64.exe; else f=google_maps_scraper-1.18.1-linux-amd64; fi
+          curl -sL -o "$f" "https://github.com/gosom/google-maps-scraper/releases/download/v1.18.1/$f" && chmod +x "$f"
+          export WAT_GOSOM="$PWD/$f"
+          cd maps && python run_maps.py --keyword "chinese supermarket" --country GB --bbox 51.49952,-0.12574,51.50853,-0.11127 --cell-km 1 --out ../gosom_out.csv 2>&1 | tail -15
+          echo "ROWS $(($(wc -l < ../gosom_out.csv) - 1))"
+      - name: 截图：谷歌给这台机器的是什么页
+        shell: bash
+        run: |
+          python - <<'PY'
+          import asyncio
+          from playwright.async_api import async_playwright
+          async def m():
+              async with async_playwright() as p:
+                  b = await p.chromium.launch()
+                  pg = await b.new_page(locale="en-US", viewport={"width": 1280, "height": 900})
+                  await pg.goto("https://www.google.com/maps/search/chinese+supermarket/@51.504012,-0.118524,17z?hl=en", wait_until="domcontentloaded")
+                  await pg.wait_for_timeout(6000)
+                  print("URL", pg.url); print("TITLE", await pg.title())
+                  print("FEED", await pg.locator('div[role="feed"]').count(), "ARTICLES", await pg.locator('div[role="feed"] > div > div > a').count())
+                  print("TEXT", (await pg.inner_text("body"))[:600].replace("\n", " | "))
+                  await pg.screenshot(path="google.png")
+                  await b.close()
+          asyncio.run(m())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: 'diag-${{ matrix.os }}', path: 'google.png' }
