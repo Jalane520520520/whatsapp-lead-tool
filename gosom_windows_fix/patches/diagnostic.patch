@@ -1,0 +1,19 @@
+diff --git a/adapters/fetchers/jshttp/jshttp.go b/adapters/fetchers/jshttp/jshttp.go
+index 0a3ec4f..08cc40b 100644
+--- a/adapters/fetchers/jshttp/jshttp.go
++++ b/adapters/fetchers/jshttp/jshttp.go
+@@ -2,5 +2,5 @@ package jshttp
+ 
+ import (
+ 	"context"
+-	"errors"
++	"fmt"
+ 	"time"
+@@ -212,6 +212,6 @@ func (o *jsFetch) Fetch(ctx context.Context, job scrapemate.IJob) scrapemate.Res
+ 	pp, ok := p.(*playwrightPage)
+ 	if !ok {
+ 		return scrapemate.Response{
+-			Error: errors.New("unexpected page type"),
++			Error: fmt.Errorf("unexpected page type: dynamic=%T value=%#v", p, p),
+ 		}
+ 	}
