@@ -7,6 +7,7 @@ Usage: run_maps.py --keyword "hot pot base supplier" --country GB --out out.csv
 import argparse, csv, json, math, os, platform, subprocess, sys, time
 import phonenumbers
 from phonenumbers import PhoneNumberType as T
+import playwright_maps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COLS = ["name", "phone_e164", "phone_type", "website", "address", "category",
@@ -68,6 +69,7 @@ def main():
     a.add_argument("--depth", type=int, default=2)  # gosom issue #338: depth>=3 crashes since 2026-10-01
     a.add_argument("--concurrency", type=int, default=1)
     a.add_argument("--inactivity", default="3m")
+    a.add_argument("--engine", choices=("auto", "gosom", "playwright"), default="auto")
     a.add_argument("--no-clip", action="store_true", help="keep rows outside the bbox")
     a.add_argument("--out", default="out.csv")
     a = a.parse_args()
@@ -83,19 +85,24 @@ def main():
         print("warning: no --country, phones without +CC will be dropped", file=sys.stderr)
     zoom = a.zoom or default_zoom(a.cell_km)
     cells = grid_cells(bbox, a.cell_km)
-    tmp = os.path.splitext(os.path.abspath(a.out))[0]
-    qf, raw = tmp + ".queries.txt", tmp + ".raw.csv"
-    open(qf, "w").write(a.keyword + "\n")
-    if os.path.exists(raw):
-        os.remove(raw)
-    cmd = [binary(), "-input", qf, "-results", raw, "-grid-bbox", ",".join(map(str, bbox)),
-           "-grid-cell", str(a.cell_km), "-zoom", str(zoom), "-depth", str(a.depth),
-           "-c", str(a.concurrency), "-exit-on-inactivity", a.inactivity]
-    print(f"cells~{cells} zoom={zoom} bbox={bbox}\n{' '.join(cmd)}", flush=True)
     t0 = time.time()
-    subprocess.run(cmd, check=False)
+    engine = "playwright" if a.engine == "auto" and platform.system() == "Windows" else a.engine
+    if engine == "playwright":
+        print(f"engine=playwright cells~{cells} zoom={zoom} bbox={bbox}", flush=True)
+        rows = playwright_maps.collect_sync(a.keyword, bbox, zoom, a.depth)
+    else:
+        tmp = os.path.splitext(os.path.abspath(a.out))[0]
+        qf, raw = tmp + ".queries.txt", tmp + ".raw.csv"
+        open(qf, "w").write(a.keyword + "\n")
+        if os.path.exists(raw):
+            os.remove(raw)
+        cmd = [binary(), "-input", qf, "-results", raw, "-grid-bbox", ",".join(map(str, bbox)),
+               "-grid-cell", str(a.cell_km), "-zoom", str(zoom), "-depth", str(a.depth),
+               "-c", str(a.concurrency), "-exit-on-inactivity", a.inactivity]
+        print(f"engine=gosom cells~{cells} zoom={zoom} bbox={bbox}\n{' '.join(cmd)}", flush=True)
+        subprocess.run(cmd, check=False)
+        rows = list(csv.DictReader(open(raw, encoding="utf-8"))) if os.path.exists(raw) else []
     wall = time.time() - t0
-    rows = list(csv.DictReader(open(raw, encoding="utf-8"))) if os.path.exists(raw) else []
     seen, out, clipped = set(), [], 0
     for r in rows:
         pid = r.get("place_id") or r.get("data_id") or r.get("cid") or r.get("link")
