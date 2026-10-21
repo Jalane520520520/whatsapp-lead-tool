@@ -22,6 +22,10 @@ if ($LASTEXITCODE) { throw 'get-pip failed' }
 # 2. Python 库（版本锁死，见 requirements.lock）
 & "$PKG\python\python.exe" -m pip install --no-warn-script-location -r requirements.lock
 if ($LASTEXITCODE) { throw 'pip install failed' }
+# 瘦身 A：crawl4ai 自带的 AI / 大模型 / 隐身模式依赖，我们查官网只用最基本的打开网页（find_wa.py），启动时也不加载它们
+& "$PKG\python\python.exe" -m pip uninstall -y patchright unclecode-litellm openai tokenizers hf-xet huggingface_hub scipy nltk networkx trimesh shapely alphashape
+& "$PKG\python\python.exe" -c "from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode; import webview, flask, openpyxl, phonenumbers; print('trimmed imports ok')"
+if ($LASTEXITCODE) { throw '瘦身后 import 失败' }
 
 # 3. 浏览器：用 playwright 装它自己要的那个 Chromium 版本，放进包里的 browsers\
 $env:PLAYWRIGHT_BROWSERS_PATH = "$PKG\browsers"
@@ -37,6 +41,8 @@ Push-Location wa_check
 if ($LASTEXITCODE) { Pop-Location; throw 'npm ci failed' }
 Pop-Location
 Move-Item wa_check\node_modules "$PKG\node_modules"
+# 瘦身 B：npm / corepack 只在打包时装库用，客户电脑上只需要 node.exe
+Remove-Item -Recurse -Force "$PKG\node\node_modules\npm", "$PKG\node\node_modules\corepack", "$PKG\node\npm*", "$PKG\node\npx*", "$PKG\node\corepack*" -ErrorAction SilentlyContinue
 
 # 5. gosom（谷歌地图）v1.18.1，从源码编译 + 打 Windows 补丁（PLAN v1.11）：
 #    scrapemate v1.4.0 启动 Chromium 写死了 --single-process/--no-zygote，Windows 上页面一开就关（官方 exe 每格 0 家）。
@@ -59,6 +65,8 @@ $env:PLAYWRIGHT_INSTALL_ONLY = '1'
 if ($LASTEXITCODE) { throw 'gosom playwright install failed' }
 Remove-Item Env:PLAYWRIGHT_INSTALL_ONLY
 if (-not (Test-Path "$PKG\pw-driver")) { throw 'gosom driver not in package' }
+# 瘦身 C：gosom 无界面运行用 chromium_headless_shell-1228；完整版 chromium-1228（415 MB）只在有界面时用。删掉后由下面安装测试的「>0 家」验证
+Remove-Item -Recurse -Force "$PKG\browsers\chromium-1228" -ErrorAction SilentlyContinue
 
 # 6. 出厂代码 + 启动器
 $CODE = 'VERSION', 'app', 'maps', 'web', 'wa_check'
@@ -83,5 +91,5 @@ $size = (Get-ChildItem $PKG -Recurse | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ("pkg ready: v{0}, {1:N0} MB" -f $V, $size)
 # 每个零件多大（找安装包太大的原因）
 Get-ChildItem $PKG -Directory | ForEach-Object { '{0,8:N0} MB  {1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }
-Get-ChildItem "$PKG\python\Lib\site-packages" -Directory | ForEach-Object { [pscustomobject]@{MB=[math]::Round((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB); Name=$_.Name} } | Sort-Object MB -Descending | Select-Object -First 15 | Format-Table -AutoSize | Out-String | Write-Host
+Get-ChildItem "$PKG\python\Lib\site-packages" -Directory | ForEach-Object { [pscustomobject]@{MB=[math]::Round((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB); Name=$_.Name} } | Sort-Object MB -Descending | Select-Object -First 15 | ForEach-Object { Write-Host ('{0,8} MB  site-packages\{1}' -f $_.MB, $_.Name) }
 Get-ChildItem "$PKG\browsers" -Directory | ForEach-Object { '{0,8:N0} MB  browsers\{1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }
