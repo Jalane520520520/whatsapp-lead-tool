@@ -4,25 +4,15 @@ $root = (Get-Location).Path
 $out = Join-Path $root 'gosom_windows_fix/results'
 New-Item -ItemType Directory -Force $out | Out-Null
 
-git clone --quiet --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git gosom-diag
-git clone --quiet --depth 1 --branch v1.4.0 https://github.com/gosom/scrapemate.git scrapemate-diag
-git clone --quiet --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git gosom-fixed
-git clone --quiet --depth 1 --branch v1.4.0 https://github.com/gosom/scrapemate.git scrapemate-fixed
-
-git -C scrapemate-diag apply "$root/gosom_windows_fix/patches/diagnostic.patch"
-git -C scrapemate-fixed apply "$root/gosom_windows_fix/patches/diagnostic.patch"
-git -C scrapemate-fixed apply "$root/gosom_windows_fix/patches/isclosed.patch"
-
-Push-Location gosom-diag
-go mod edit "-replace=github.com/gosom/scrapemate=../scrapemate-diag"
+# Round 2 (PLAN v1.11): scrapemate launches Chromium with --single-process/--no-zygote, which Windows does not support.
+git clone --quiet --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git gosom-win
+git clone --quiet --depth 1 --branch v1.4.0 https://github.com/gosom/scrapemate.git scrapemate-win
+git -C scrapemate-win apply "$root/gosom_windows_fix/patches/diagnostic.patch"
+git -C scrapemate-win apply "$root/gosom_windows_fix/patches/winargs.patch"
+Push-Location gosom-win
+go mod edit "-replace=github.com/gosom/scrapemate=../scrapemate-win"
 go mod tidy
-go build -o "$out/gosom-diag.exe" .
-Pop-Location
-
-Push-Location gosom-fixed
-go mod edit "-replace=github.com/gosom/scrapemate=../scrapemate-fixed"
-go mod tidy
-go build -o "$out/gosom-fixed.exe" .
+go build -o "$out/gosom-winargs.exe" .
 Pop-Location
 
 Set-Content -Encoding utf8 "$out/query.txt" 'chinese supermarket'
@@ -68,9 +58,9 @@ function Run-Case {
     $summary | ConvertTo-Json -Compress | Tee-Object -FilePath "$out/$Name.json"
 }
 
-Run-Case -Name 'diag-default' -Exe "$out/gosom-diag.exe" -PagesPerBrowser 1
-Run-Case -Name 'diag-pages2' -Exe "$out/gosom-diag.exe" -PagesPerBrowser 2
-Run-Case -Name 'fixed-default' -Exe "$out/gosom-fixed.exe" -PagesPerBrowser 1
+# pass: every one of 10 default runs gives clipped_rows > 0 with 0 unexpected page type and 0 target closed
+1..10 | ForEach-Object { Run-Case -Name ("winargs-default-{0:D2}" -f $_) -Exe "$out/gosom-winargs.exe" -PagesPerBrowser 1 }
+Run-Case -Name 'winargs-pages2' -Exe "$out/gosom-winargs.exe" -PagesPerBrowser 2
 
 Get-Content "$out/*.json" | Set-Content -Encoding utf8 "$out/summary.jsonl"
 Get-Content "$out/summary.jsonl"

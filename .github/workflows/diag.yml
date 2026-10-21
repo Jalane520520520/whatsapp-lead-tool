@@ -4,7 +4,7 @@ on: workflow_dispatch
 jobs:
   gosom-windows-matrix:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v6
