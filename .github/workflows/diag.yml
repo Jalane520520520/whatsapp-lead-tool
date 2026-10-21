@@ -23,8 +23,19 @@ jobs:
           export WAT_GOSOM="$PWD/$f"
           cd maps && python run_maps.py --keyword "chinese supermarket" --country GB --bbox 51.49952,-0.12574,51.50853,-0.11127 --cell-km 1 --out ../gosom_out.csv 2>&1 | tail -15
           echo "ROWS $(($(wc -l < ../gosom_out.csv) - 1))"
+      - name: Windows 本机从 v1.18.1 源码编译后跑同一格
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          git clone --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git gosom-source
+          (cd gosom-source && go build -o ../gosom-source.exe .)
+          export WAT_GOSOM="$PWD/gosom-source.exe"
+          cd maps && python run_maps.py --keyword "chinese supermarket" --country GB --bbox 51.49952,-0.12574,51.50853,-0.11127 --cell-km 1 --out ../source_out.csv 2>&1 | tail -15
+          echo "SOURCE_ROWS $(($(wc -l < ../source_out.csv) - 1))"
       - name: 截图：谷歌给这台机器的是什么页
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           python - <<'PY'
           import asyncio
