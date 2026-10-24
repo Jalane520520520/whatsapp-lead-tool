@@ -117,7 +117,11 @@ def status():
         lr = L["proc"] is not None and L["proc"].poll() is None
         st = {"state": S["state"], "kws": S["kws"], "cc": S["cc"], "excel": S["excel"], **stage_info(S["log"])}
     pair = open(PAIR, encoding="utf-8").read().strip() if lr and os.path.exists(PAIR) else ""
-    return jsonify(**st, version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
+    err = ""
+    if L["proc"] is not None and not lr and not me():          # login ended without a link: show why on the page
+        try: err = open(os.path.join(paths.WA_STATE, "login.log"), encoding="utf-8").read().strip().splitlines()[-1][25:200]
+        except (OSError, IndexError): err = "登录程序没有启动"
+    return jsonify(**st, login_error=err, proxy=paths.system_proxy(), version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
 
 
 @app.get("/results")

@@ -108,7 +108,7 @@ function loginCard(){
  return `<div class=login><div style="flex:1"><div style="font-size:28px;margin-bottom:22px">先登录 WhatsApp</div>
  <div style="font-size:16px;line-height:2.3"><div><span class=num>1</span>打开备用手机的 WhatsApp</div><div><span class=num>2</span>设置 → 已关联设备 → 关联新设备</div>
  <div><span class=num>3</span>${phoneMode?'选「用电话号码关联」，输入右边的码':'扫右边的码'}</div></div>
- <div style="margin-top:14px;font-size:14px">不登录也能抓：只拿官网上写的 WhatsApp</div></div>
+ <div style="margin-top:14px;font-size:14px">不登录也能抓：只拿官网上写的 WhatsApp</div>${S.login_error?`<div style="margin-top:10px;font-size:12px;color:#b3261e">没连上：${esc(S.login_error)}${S.proxy?'':' · 没找到 VPN 代理，请打开 VPN 的系统代理'}</div>`:''}</div>
  <div style="width:240px">${right}<div style="margin-top:24px"><span class=ul onclick="phoneMode=!phoneMode;render()">${phoneMode?'改用扫码登录 ›':'用电话号码登录 ›'}</span></div></div></div>`}
 // ---- views
 function waRows(list,max){return list.slice(0,max).map(r=>`<div class=row><div class=n>${esc(r.name)}</div><div class=c>${esc([r.category,r.city].filter(Boolean).join(' · '))}${r.src=='官网'?' · 官网上写的':''}</div><div class=w>WhatsApp ${esc(r.wa)}</div></div>`).join('')}

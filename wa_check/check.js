@@ -4,6 +4,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import http from 'node:http'
+import https from 'node:https'
+import tls from 'node:tls'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 // Libraries load by absolute path: after a hot update this file sits in %LOCALAPPDATA%\...\app\<ver>\ while node_modules
@@ -11,6 +14,41 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const NM = process.env.WAT_NODE_MODULES || path.join(HERE, 'node_modules')
 const req = createRequire(path.join(NM, '_.js'))
 const mod = async name => import(pathToFileURL(req.resolve(name)).href)
+
+// WhatsApp is blocked in mainland China. Clients' VPNs usually only set the Windows *system proxy*, which
+// browsers follow but Node does not. WAT_PROXY (read from the system proxy by the Python side) routes both
+// WhatsApp connections through it: an HTTP CONNECT tunnel, Node built-ins only (no new library).
+const PROXY = (() => {
+  const raw = process.env.WAT_PROXY || ''
+  const m = raw.match(/^(?:https?:\/\/)?([^/:]+):(\d+)/)
+  return m ? { host: m[1], port: Number(m[2]) } : null
+})()
+class TunnelAgent extends https.Agent {
+  createConnection(opts, cb) {
+    const host = opts.host || opts.hostname, port = opts.port || 443
+    const r = http.request({ host: PROXY.host, port: PROXY.port, method: 'CONNECT', path: `${host}:${port}`, headers: { Host: `${host}:${port}` } })
+    r.once('connect', (res, socket) => {
+      if (res.statusCode !== 200) { socket.destroy(); return cb(new Error(`proxy CONNECT ${res.statusCode}`)) }
+      cb(null, tls.connect({ socket, servername: opts.servername || host, ALPNProtocols: opts.ALPNProtocols }))
+    })
+    r.once('error', cb)
+    r.end()
+  }
+}
+const AGENT = PROXY ? new TunnelAgent({ keepAlive: false }) : undefined
+
+// Same request Baileys makes (web.whatsapp.com/sw.js -> client_revision), but through the proxy.
+// Baileys' own fetch ignores proxies and silently falls back to an old version, which WhatsApp refuses to link.
+function webVersion() {
+  return new Promise(resolve => {
+    const r = https.get('https://web.whatsapp.com/sw.js', { agent: AGENT, timeout: 15000,
+      headers: { 'sec-fetch-site': 'none', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } }, res => {
+      let d = ''; res.on('data', c => { d += c }); res.on('end', () => {
+        const m = d.match(/\\?"client_revision\\?":\s*(\d+)/); resolve(m ? [2, 3000, Number(m[1])] : null) })
+    })
+    r.on('timeout', () => r.destroy()); r.on('error', () => resolve(null))
+  })
+}
 const STATE = process.env.WA_STATE || HERE  // installed: %LOCALAPPDATA%\\WhatsApp客户提取\\wa_auth
 fs.mkdirSync(STATE, { recursive: true })
 const AUTH_DIR = path.join(STATE, 'auth')
@@ -139,10 +177,10 @@ async function main() {
 
   async function connect() {
     // WhatsApp rejects links from an old web version ("check your connection"); ask web.whatsapp.com first
-    let { version } = await baileys.fetchLatestWaWebVersion().catch(() => ({}))
+    let version = await webVersion()
     if (!version) ({ version } = await fetchLatestBaileysVersion().catch(() => ({})))
-    llog(`connect, wa version ${version ? version.join('.') : 'default'}`)
-    sock = makeWASocket({ version, auth: state, logger, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
+    llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'}, wa version ${version ? version.join('.') : 'default'}`)
+    sock = makeWASocket({ version, auth: state, logger, agent: AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
     sock.ev.on('creds.update', saveCreds)
     sock.ev.on('connection.update', async u => {
       llog(`update connection=${u.connection ?? '-'} qr=${u.qr ? 'yes' : '-'} isNewLogin=${u.isNewLogin ?? '-'} status=${u.lastDisconnect?.error?.output?.statusCode ?? '-'} ${u.lastDisconnect?.error?.message ?? ''}`)
@@ -178,6 +216,10 @@ async function main() {
   const ready = () => new Promise(res => { if (open || fatal) return res(); waiters.push(res) })
 
   const finish = (code) => { writeResults(args.out, nums, cache); if (fatal) console.error(fatal); process.exit(code) }
+  if (args.loginOnly) setTimeout(() => {   // network blocked: stop retrying and say why instead of spinning forever
+    if (!open && !fs.existsSync(QR_PNG) && !fs.existsSync(PAIR_TXT)) {
+      llog(`连不上 WhatsApp：90 秒没拿到二维码（代理 ${PROXY ? PROXY.host + ':' + PROXY.port : '无'}）`); process.exit(4) }
+  }, 90000).unref()
   await connect()
   await ready()
   if (fatal) return args.loginOnly ? (console.error(fatal), process.exit(1)) : finish(1)

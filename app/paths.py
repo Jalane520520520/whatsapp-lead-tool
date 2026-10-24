@@ -16,8 +16,22 @@ GOSOM = os.environ.get("WAT_GOSOM") or ""          # installed: <install>\gosom\
 NODE_MODULES = os.environ.get("WAT_NODE_MODULES") or os.path.join(CODE, "wa_check", "node_modules")
 
 
+def system_proxy():
+    """The proxy the client's VPN set (Windows: registry 'Internet Settings', read by urllib). Browsers follow it,
+    Node does not, so check.js gets it as WAT_PROXY. WhatsApp is blocked in mainland China (10-23: no QR)."""
+    import urllib.request
+    p = urllib.request.getproxies()
+    for k in ("https", "http"):
+        v = p.get(k, "")
+        if v and not v.startswith("socks"):
+            return v
+    return ""
+
+
 def child_env():
-    """Env for child programs (check.js reads WA_STATE; node finds Baileys through NODE_PATH)."""
+    """Env for child programs (check.js reads WA_STATE and WAT_PROXY)."""
     e = dict(os.environ, WA_STATE=WA_STATE)
+    if not e.get("WAT_PROXY"):
+        e["WAT_PROXY"] = system_proxy()
     if os.environ.get("WAT_HOME"): e["NODE_PATH"] = NODE_MODULES
     return e
