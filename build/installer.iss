@@ -13,7 +13,8 @@ DefaultDirName={autopf}\WhatsAppLeadTool
 DefaultGroupName=WhatsApp客户提取
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename=WhatsAppLeadTool-Setup-{#AppVer}   ; 只用英文：GitHub 发布页会去掉文件名里的中文
+; 只用英文：GitHub 发布页会去掉文件名里的中文（Inno 不支持行尾注释，注释必须单独一行）
+OutputBaseFilename=WhatsAppLeadTool-Setup-{#AppVer}
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
