@@ -1,0 +1,18 @@
+schema: spec-driven
+
+context: |
+  Windows desktop tool used from mainland China behind a VPN system proxy.
+  GitHub is slow or unreachable from the user's network (~15 KB/s measured).
+  The launcher is inside the installer and is NOT hot-updated; only app code is.
+  This repo is public: no customer names, prices, phone numbers or local paths.
+
+rules:
+  specs:
+    - Every scenario must be checkable on a real Windows machine on a China network (Wuying), not on a Mac.
+  tasks:
+    - Each task names the files it changes, the spec scenarios it satisfies, and the command that proves it.
+
+operations:
+  apply:
+    guidance:
+      - A scenario that cannot be checked for lack of an environment is marked NOT VERIFIED with a reason; other tasks keep running.
