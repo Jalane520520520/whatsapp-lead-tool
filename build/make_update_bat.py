@@ -2,7 +2,7 @@
 For clients whose network can't reach GitHub: the launcher's hot update fails silently there, so we hand them the same
 app.zip inside a .bat. It does what launcher.update() does: check the files, check VERSION, unpack to
 %LOCALAPPDATA%\\WhatsApp客户提取\\app\\<ver>, then write current.txt last.
-Usage: python3 build/make_update_bat.py <app.zip> <out.bat>"""
+Usage: python3 build/make_update_bat.py <app.zip> dist/update-<ver>.bat   (ASCII name only: Chinese names in a zip break Expand-Archive), then zip it"""
 import base64, sys, zipfile
 
 zp, out = sys.argv[1:3]
@@ -19,6 +19,7 @@ $home_ = Join-Path $env:LOCALAPPDATA 'WhatsApp客户提取'
 $apps = Join-Path $home_ 'app'
 function Done($ok, $msg) { Write-Host ''; Write-Host $msg; Write-Host ''; Read-Host '按回车键关闭这个窗口'; exit $(if ($ok) { 0 } else { 1 }) }
 try {
+  if (-not (Test-Path $home_)) { throw "没找到已安装的「WhatsApp客户提取」（$home_），请先安装，再运行这个更新文件" }
   Get-Process pythonw -ErrorAction SilentlyContinue | Where-Object { $_.Path -like '*WhatsAppLeadTool*' } | Stop-Process -Force -ErrorAction SilentlyContinue
   $t = Get-Content -Raw -Encoding UTF8 $env:WAT_BAT
   $a = $t.IndexOf('#PAYLOAD' + '-BEGIN') + 14; $b = $t.IndexOf('#PAYLOAD' + '-END')
@@ -47,7 +48,7 @@ bat = ('@echo off\r\n'
        'powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=Get-Content -Raw -Encoding UTF8 $env:WAT_BAT; '
        '$i=$t.IndexOf([string][char]35+\'PS-BEGIN\')+9; $j=$t.IndexOf([string][char]35+\'PS-END\'); '
        'Invoke-Expression $t.Substring($i,$j-$i)"\r\n'
-       'exit /b\r\n'
+       'exit /b %errorlevel%\r\n'
        '#PS-BEGIN\r\n' + PS.replace("\n", "\r\n") + '#PS-END\r\n'
        '#PAYLOAD-BEGIN\r\n' + lines.replace("\n", "\r\n") + '\r\n#PAYLOAD-END\r\n')
 open(out, "w", encoding="utf-8", newline="").write(bat)

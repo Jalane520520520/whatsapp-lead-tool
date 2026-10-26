@@ -1,6 +1,6 @@
 ## 1. Update
 - [x] 1.1 `build/make_update_bat.py` builds the offline update .bat + zip. Spec: update/Update with dead proxy. Proof: Wuying run, `out_upgrade.txt` (exit 0, footer 1.0.1).
-- [ ] 1.2 Failure path prints `更新没成功` + reason. Spec: update/Update fails visibly. Proof: Wuying run with install folder renamed.
+- [x] 1.2 Failure path prints `更新没成功` + reason. Spec: update/Update fails visibly. Proof: Wuying run with install folder renamed.
 - [x] 1.3 Online update regression. Spec: update/Online update. Proof: Wuying clean 1.0.0 log line.
 
 ## 2. WhatsApp login
