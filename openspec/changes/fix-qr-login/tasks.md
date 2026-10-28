@@ -16,4 +16,4 @@
 
 ## 4. Release
 
-- [ ] 4.1 Bump `VERSION`, build update zip with `build/make_update_bat.py`; prove: update applied on Wuying shows new version bottom-right.
+- [x] 4.1 Bump `VERSION`, build update zip with `build/make_update_bat.py`; prove: update applied on Wuying shows new version bottom-right. — GitHub run 40616133051 passed, release v1.0.2 (app.zip + installer). dist/update-1.0.2.zip (sha256 9e9f7b8a…a7342b) on Wuying sim install with dead proxy: 1.0.0 -> "更新完成：已更新到 1.0.2" exit 0, launcher "running 1.0.2", current.txt 1.0.2
