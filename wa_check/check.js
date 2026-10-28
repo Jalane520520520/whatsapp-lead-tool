@@ -177,9 +177,11 @@ async function main() {
 
   async function connect() {
     // WhatsApp rejects links from an old web version ("check your connection"); ask web.whatsapp.com first
-    let version = await webVersion()
-    if (!version) ({ version } = await fetchLatestBaileysVersion().catch(() => ({})))
-    llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'}, wa version ${version ? version.join('.') : 'default'}`)
+    let version = await webVersion(), source = 'live'
+    if (!version) { source = 'fallback'; ({ version } = await fetchLatestBaileysVersion().catch(() => ({}))) }
+    if (!version) source = 'default'
+    // source= is read by server.py /status: anything but live means the phone may refuse the scan
+    llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'}, wa version ${version ? version.join('.') : 'default'} source=${source}`)
     sock = makeWASocket({ version, auth: state, logger, agent: AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
     sock.ev.on('creds.update', saveCreds)
     sock.ev.on('connection.update', async u => {

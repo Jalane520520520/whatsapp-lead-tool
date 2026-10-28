@@ -111,6 +111,16 @@ def start():
     return jsonify(ok=True)
 
 
+def wa_source():
+    """'live' / 'fallback' / 'default' from the last connect line check.js wrote; '' before the first connect."""
+    try: lines = open(os.path.join(paths.WA_STATE, "login.log"), encoding="utf-8").read().splitlines()
+    except OSError: return ""
+    for l in reversed(lines):
+        m = re.search(r" connect, .* source=(\w+)", l)
+        if m: return m.group(1)
+    return ""
+
+
 @app.get("/status")
 def status():
     with lock:
@@ -121,7 +131,7 @@ def status():
     if L["proc"] is not None and not lr and not me():          # login ended without a link: show why on the page
         try: err = open(os.path.join(paths.WA_STATE, "login.log"), encoding="utf-8").read().strip().splitlines()[-1][25:200]
         except (OSError, IndexError): err = "登录程序没有启动"
-    return jsonify(**st, login_error=err, proxy=paths.system_proxy(), version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
+    return jsonify(**st, login_error=err, wa_source=wa_source(), proxy=paths.system_proxy(), version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
 
 
 @app.get("/results")
