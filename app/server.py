@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The tool's window (final.html design, 10-21): search box + chips, WhatsApp login card, 4-step progress,
 WhatsApp result list, search history (one table per keyword+country, opened in place)."""
-import json, os, re, subprocess, sys, threading, time
+import json, os, re, shutil, subprocess, sys, threading, time
 from flask import Flask, jsonify, request, send_file, abort, Response
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -175,6 +175,24 @@ def open_():
     for f in (x[:-5] + " (新).xlsx", x) if d.get("newest") else (x,):
         if os.path.exists(f): open_path(f); return jsonify(ok=True)
     return jsonify(ok=False, error="这张表还没有 Excel，先抓一次")
+
+
+@app.post("/download")
+def download():
+    """Copy the newest Excel of this search to Downloads as <国家>_<关键词>_<日期>.xlsx and show it in the folder."""
+    pj = os.path.join(C.DATA, os.path.basename((request.get_json(force=True) or {}).get("key", "")), "progress.json")
+    if not os.path.exists(pj): return jsonify(ok=False, error="这张表还没有 Excel，先抓一次")
+    prog = json.load(open(pj, encoding="utf-8")); x = C.excel_path(prog["country"], prog["keywords"])
+    src = next((f for f in (x[:-5] + " (新).xlsx", x) if os.path.exists(f)), None)
+    if not src: return jsonify(ok=False, error="这张表还没有 Excel，先抓一次")
+    kws = sorted({k.strip() for k in prog["keywords"] if k.strip()}, key=str.lower)
+    name = re.sub(r'[\\/:*?"<>|]+', " ", f"{CN.get(prog['country'].upper(), prog['country'].upper())}_{'+'.join(kws)}")[:100].strip()
+    dl = os.environ.get("WAT_DOWNLOADS") or os.path.join(os.path.expanduser("~"), "Downloads")
+    os.makedirs(dl, exist_ok=True)
+    dst = os.path.join(dl, f"{name}_{time.strftime('%Y-%m-%d')}.xlsx")
+    shutil.copyfile(src, dst)
+    if not os.environ.get("WAT_DOWNLOADS"): open_path(dl)
+    return jsonify(ok=True, file=dst)
 
 
 @app.get("/key")

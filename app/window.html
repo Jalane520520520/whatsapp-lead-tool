@@ -108,7 +108,7 @@ function loginCard(){
  return `<div class=login><div style="flex:1"><div style="font-size:28px;margin-bottom:22px">先登录 WhatsApp</div>
  <div style="font-size:16px;line-height:2.3"><div><span class=num>1</span>打开备用手机的 WhatsApp</div><div><span class=num>2</span>设置 → 已关联设备 → 关联新设备</div>
  <div><span class=num>3</span>${phoneMode?'选「用电话号码关联」，输入右边的码':'扫右边的码'}</div></div>
- <div style="margin-top:14px;font-size:14px">不登录也能抓：只拿官网上写的 WhatsApp</div>${S.login_error?`<div style="margin-top:10px;font-size:12px;color:#b3261e">没连上：${esc(S.login_error)}${S.proxy?'':' · 没找到 VPN 代理，请打开 VPN 的系统代理'}</div>`:''}</div>
+ <div style="margin-top:14px;font-size:14px">不登录也能抓：只拿官网上写的 WhatsApp</div>${S.login_error?`<div style="margin-top:10px;font-size:12px;color:#b3261e">${S.proxy?'没连上：'+esc(S.login_error):'没找到 VPN 代理，连不上 WhatsApp。请先打开 VPN，并打开它的「系统代理」，再点一次「显示二维码」。'}</div>`:''}</div>
  <div style="width:240px">${right}<div style="margin-top:24px"><span class=ul onclick="phoneMode=!phoneMode;render()">${phoneMode?'改用扫码登录 ›':'用电话号码登录 ›'}</span></div></div></div>`}
 // ---- views
 function waRows(list,max){return list.slice(0,max).map(r=>`<div class=row><div class=n>${esc(r.name)}</div><div class=c>${esc([r.category,r.city].filter(Boolean).join(' · '))}${r.src=='官网'?' · 官网上写的':''}</div><div class=w>WhatsApp ${esc(r.wa)}</div></div>`).join('')}
@@ -128,12 +128,13 @@ function render(){
   `<div style="margin-bottom:-20px">${step(4,c,'导出 Excel',c>4?'完成':'等待')}</div></div>
   <div class=card style="flex:1;padding:0"><div style="padding:16px 18px;font-size:18px">已有结果 · ${R?R.wa.length:0} 个 WhatsApp</div>${R?waRows(R.wa,6):''}</div></div>`}
  else if(R&&R.total){h+=`<div class=card style="padding:0;margin-top:22px"><div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px">
-  <span style="font-size:20px">结果 · ${R.wa.length} 个 WhatsApp <span class=small>/ 共 ${R.total} 家商家</span></span><button class=btn2 onclick=openCur()>打开 Excel</button></div>
+  <span style="font-size:20px">结果 · ${R.wa.length} 个 WhatsApp <span class=small>/ 共 ${R.total} 家商家</span></span><span><button class=btn2 onclick=downloadCur()>下载 Excel</button> <button class=btn2 onclick=openCur()>打开 Excel</button></span></div>
   ${waRows(R.wa,200)||'<div class="row c">这张表还没有 WhatsApp 号码，再抓几格试试</div>'}</div>`}
  else if(S.me&&!running) h+=`<div class=card style="margin-top:22px;color:#5f6368">输入产品关键词，选国家，点「开始抓取」。点搜索框可以看到以前搜过的。</div>`;
  if(S.state=='done'&&S.locked) h=`<div class=warn>Excel 正在被打开，这次结果另存为：${esc(S.locked)}。关掉 Excel 后下次会写回原表。</div>`+h;
  if(S.state=='error') h=`<div class=warn>这次没跑完。已抓完的格子都已保存，再点一次会接着抓。</div>`+h;
  main.innerHTML=h}
+async function downloadCur(){const j=await post('/download',{key:await curKey()});if(!j.ok)alert(j.error)}
 async function openCur(){openIt({key:await curKey(),newest:true})}
 let lastState='';
 async function poll(){try{S=await (await fetch('/status')).json();
