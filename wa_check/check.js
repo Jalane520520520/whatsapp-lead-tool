@@ -183,7 +183,12 @@ async function main() {
     // source= is read by server.py /status: anything but live means the phone may refuse the scan
     llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'}, wa version ${version ? version.join('.') : 'default'} source=${source}`)
     sock = makeWASocket({ version, auth: state, logger, agent: AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
-    sock.ev.on('creds.update', saveCreds)
+    sock.ev.on('creds.update', u => {
+      // pairing reached us = the phone's scan got through; no such line after a scan = it never arrived
+      if (u.me || u.registered !== undefined || u.pairingCode) llog(`creds me=${u.me?.id ?? '-'} registered=${u.registered ?? '-'} platform=${u.platform ?? '-'}`)
+      saveCreds()
+    })
+    sock.ws?.on?.('error', e => llog(`ws error ${e?.code ?? ''} ${String(e?.message ?? e).slice(0, 200)}`))
     sock.ev.on('connection.update', async u => {
       llog(`update connection=${u.connection ?? '-'} qr=${u.qr ? 'yes' : '-'} isNewLogin=${u.isNewLogin ?? '-'} status=${u.lastDisconnect?.error?.output?.statusCode ?? '-'} ${u.lastDisconnect?.error?.message ?? ''}`)
       if (u.qr) {
@@ -207,6 +212,7 @@ async function main() {
       if (u.connection === 'close') {
         open = false
         const code = u.lastDisconnect?.error?.output?.statusCode
+        try { const d = u.lastDisconnect?.error?.data; if (d) llog(`close data ${JSON.stringify(d).slice(0, 300)}`) } catch {}
         if (code === DisconnectReason.loggedOut || STOP_CODES.has(code) ) return stop(`STOPPED: account restricted or logged out (status ${code})`)
         const delay = Math.min(60000, 2000 * 2 ** attempt++)
         console.log(`Disconnected (status ${code}). Reconnecting in ${delay / 1000} s...`)
