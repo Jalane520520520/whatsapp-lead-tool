@@ -39,16 +39,27 @@ const AGENT = PROXY ? new TunnelAgent({ keepAlive: false }) : undefined
 
 // Same request Baileys makes (web.whatsapp.com/sw.js -> client_revision), but through the proxy.
 // Baileys' own fetch ignores proxies and silently falls back to an old version, which WhatsApp refuses to link.
-function webVersion() {
+function webVersion(agent) {  // agent undefined = direct
   return new Promise(resolve => {
-    const r = https.get('https://web.whatsapp.com/sw.js', { agent: AGENT, timeout: 15000,
+    const r = https.get('https://web.whatsapp.com/sw.js', { agent: agent || undefined, timeout: 15000,
       headers: { 'sec-fetch-site': 'none', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } }, res => {
       let d = ''; res.on('data', c => { d += c }); res.on('end', () => {
         const m = d.match(/\\?"client_revision\\?":\s*(\d+)/); resolve(m ? [2, 3000, Number(m[1])] : null) })
     })
-    r.on('timeout', () => r.destroy()); r.on('error', () => resolve(null))
+    r.on('timeout', () => { r.destroy(); resolve(null) }); r.on('error', () => resolve(null))
   })
 }
+// 11-13 client (FlClash): the browser reached WhatsApp but our tunnel through the system proxy 127.0.0.1:7890 timed out.
+// VPNs in TUN mode (虚拟网卡) carry direct traffic while the proxy port may be dead or stale, so try BOTH routes
+// and use whichever answers. Without a proxy this is just the direct route, as before.
+let ROUTE_AGENT = AGENT, ROUTE = PROXY ? 'proxy' : 'direct'
+async function pickRoute() {
+  const [viaProxy, viaDirect] = await Promise.all([PROXY ? webVersion(AGENT) : null, webVersion(false)])
+  if (viaProxy) { ROUTE_AGENT = AGENT; ROUTE = 'proxy' }
+  else if (viaDirect) { ROUTE_AGENT = undefined; ROUTE = 'direct' }
+  return viaProxy || viaDirect
+}
+
 const STATE = process.env.WA_STATE || HERE  // installed: %LOCALAPPDATA%\\WhatsApp客户提取\\wa_auth
 fs.mkdirSync(STATE, { recursive: true })
 const AUTH_DIR = path.join(STATE, 'auth')
@@ -177,12 +188,12 @@ async function main() {
 
   async function connect() {
     // WhatsApp rejects links from an old web version ("check your connection"); ask web.whatsapp.com first
-    let version = await webVersion(), source = 'live'
+    let version = await pickRoute(), source = 'live'
     if (!version) { source = 'fallback'; ({ version } = await fetchLatestBaileysVersion().catch(() => ({}))) }
     if (!version) source = 'default'
     // source= is read by server.py /status: anything but live means the phone may refuse the scan
-    llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'}, wa version ${version ? version.join('.') : 'default'} source=${source}`)
-    sock = makeWASocket({ version, auth: state, logger, agent: AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
+    llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'} route=${ROUTE}, wa version ${version ? version.join('.') : 'default'} source=${source}`)
+    sock = makeWASocket({ version, auth: state, logger, agent: ROUTE_AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
     sock.ev.on('creds.update', u => {
       // pairing reached us = the phone's scan got through; no such line after a scan = it never arrived
       if (u.me || u.registered !== undefined || u.pairingCode) llog(`creds me=${u.me?.id ?? '-'} registered=${u.registered ?? '-'} platform=${u.platform ?? '-'}`)
