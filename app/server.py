@@ -79,13 +79,24 @@ def index():
 
 
 def watch(p, logf):
-    for line in p.stdout:
-        with lock:
-            S["log"].append(line.rstrip()); S["log"] = S["log"][-600:]
-            if line.startswith(tuple("0123456789")) and "EXCEL:" in line: S["excel"] = line.split("EXCEL:", 1)[1].strip()
-        logf.write(line); logf.flush()
-    rc = p.wait(); logf.close()
-    with lock: S["state"] = "done" if rc in (0, 2) and S["excel"] else "error"
+    # 11-14 client (Chinese Windows): pipeline printed GBK bytes, utf-8 decode raised inside this thread, the thread died
+    # and the window stayed on 抓取中 forever. Child now writes UTF-8 (PYTHONUTF8) and any odd byte is replaced, not fatal;
+    # whatever happens here, the state must leave "running".
+    rc = None
+    try:
+        for line in p.stdout:
+            with lock:
+                S["log"].append(line.rstrip()); S["log"] = S["log"][-600:]
+                if line.startswith(tuple("0123456789")) and "EXCEL:" in line: S["excel"] = line.split("EXCEL:", 1)[1].strip()
+            logf.write(line); logf.flush()
+        rc = p.wait()
+    except Exception as e:
+        try: logf.write(f"WATCH_ERROR: {type(e).__name__}: {e}\n")
+        except Exception: pass
+    finally:
+        try: logf.close()
+        except Exception: pass
+        with lock: S["state"] = "done" if rc in (0, 2) and S["excel"] else "error"
 
 
 @app.post("/start")
@@ -103,7 +114,8 @@ def start():
         cmd = [sys.executable, os.path.join(HERE, "pipeline.py"), "--keywords", ";".join(kws), "--country", cc,
                "--cells", str(n), "--run-dir", run_dir]           # Excel always goes to the one table of this keyword+country
         if city: cmd += ["--city", city]
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding="utf-8")
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding="utf-8",
+                             errors="replace", env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"))
         S.update(state="running", proc=p, log=[], kws=kws, cc=cc, excel=None)
         threading.Thread(target=watch, args=(p, open(os.path.join(run_dir, "log.txt"), "w", encoding="utf-8")), daemon=True).start()
     hid = _hidden(); key = C.slug_for(cc, kws)

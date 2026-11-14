@@ -34,7 +34,7 @@ def _die(signum, frame):
 def run_tee(cmd, cwd=None, quiet=False):
     """Run in its own process group, echo output, return (returncode, browser-crash lines)."""
     global CHILD
-    CHILD = p = subprocess.Popen(cmd, cwd=cwd, env=paths.child_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+    CHILD = p = subprocess.Popen(cmd, cwd=cwd, env=paths.child_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                  errors="replace", start_new_session=True)
     crashes = 0
     for line in p.stdout:
