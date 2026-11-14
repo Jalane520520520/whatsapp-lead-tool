@@ -1,6 +1,6 @@
 """City list -> ordered 1 km cells, plus the progress ledger (progress.json) helpers.
 Our defaults (not from any source): city square side by population, 1 km cells (best yield measured, maps/NOTES.md)."""
-import hashlib, json, math, os, re, tempfile
+import hashlib, json, math, os, re, tempfile, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.dirname(HERE)
@@ -81,7 +81,8 @@ def load_progress(country, keywords):
     d = data_dir(country, keywords)
     p = os.path.join(d, "progress.json")
     if os.path.exists(p):
-        return json.load(open(p, encoding="utf-8"))
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
     return {"country": country.upper(), "keywords": sorted({k.strip() for k in keywords if k.strip()}),
             "cells": [dict(c, status="") for c in build_cells(country)]}
 
@@ -93,7 +94,20 @@ def save_progress(country, keywords, prog):
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(prog, f, ensure_ascii=False, separators=(",", ":"))
         f.flush(); os.fsync(f.fileno())
-    os.replace(tmp, os.path.join(d, "progress.json"))   # atomic: a kill never leaves a half file
+    dest = os.path.join(d, "progress.json")
+    # Windows can deny replace while a reader/scanner briefly has the destination open.
+    # Keep the atomic operation; never delete/truncate the old ledger to bypass a lock.
+    for attempt in range(11):
+        try:
+            os.replace(tmp, dest)
+            return
+        except PermissionError as exc:
+            if attempt == 10:
+                raise PermissionError(
+                    f"保存进度失败（重试后仍拒绝访问）：{dest}。"
+                    f"旧进度未删除，本次待保存进度保留在：{tmp}"
+                ) from exc
+            time.sleep(min(0.05 * 2 ** attempt, 0.5))
 
 
 def summary(prog):
