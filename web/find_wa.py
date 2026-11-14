@@ -114,7 +114,10 @@ async def main(inp, out, region="GB"):
             done[r["place_id"]] = r
     fields = list(rows[0].keys()) + NEW_COLS
     t0 = time.time(); timings = []
-    bc = BrowserConfig(headless=True, verbose=False)
+    # 11-14 client in China: route the browser through the VPN proxy too (Playwright ignores the system proxy)
+    px = os.environ.get("WAT_PROXY", "").strip()
+    px = (px if "://" in px else "http://" + px) if px and not px.startswith("socks") else None
+    bc = BrowserConfig(headless=True, verbose=False, **({"proxy_config": {"server": px}} if px else {}))
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader()
         async with AsyncWebCrawler(config=bc) as crawler:

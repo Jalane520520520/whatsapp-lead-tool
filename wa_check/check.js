@@ -90,6 +90,7 @@ function parseArgs(argv) {
     else if (k === '--dry-run') a.dryRun = true
     else if (k === '--batch-pause') a.batchPause = Number(argv[++i])
     else if (k === '--login-only') a.loginOnly = true
+    else if (k === '--logout') { a.logout = true; a.loginOnly = true }  // 换账号: unlink this device on the phone too
     else if (k === '--require-login') a.requireLogin = true
     else if (k === '--pair') a.pair = String(argv[++i] || '').replace(/\D/g, '') // link by 8-char code instead of QR
     else { console.error(`Unknown argument ${k}`); process.exit(2) }
@@ -228,6 +229,7 @@ async function main() {
     sock.ev.on('connection.update', async u => {
       llog(`update connection=${u.connection ?? '-'} qr=${u.qr ? 'yes' : '-'} isNewLogin=${u.isNewLogin ?? '-'} status=${u.lastDisconnect?.error?.output?.statusCode ?? '-'} ${u.lastDisconnect?.error?.message ?? ''}`)
       if (u.qr) {
+        if (args.logout) { llog('logout: not logged in, nothing to unlink'); process.exit(0) }
         // --require-login: never wait for a scan; the run goes on without the check (exit 3)
         if (args.requireLogin) { console.log('NOT_LOGGED_IN: WhatsApp not logged in, check skipped'); try { writeResults(args.out, nums, cache) } catch {} process.exit(3) }
         if (args.pair) {
@@ -269,6 +271,7 @@ async function main() {
   await connect()
   await ready()
   if (fatal) return args.loginOnly ? (console.error(fatal), process.exit(1)) : finish(1)
+  if (args.logout) { try { await sock.logout() ; llog('logout: unlinked on the phone') } catch (e) { llog(`logout failed ${e?.message}`) } await sleep(1000); process.exit(0) }
   if (args.loginOnly) { console.log('LOGGED_IN'); await sleep(3000); try { sock.end(undefined) } catch {} process.exit(0) }
 
   const batches = chunk(todo, PER_BATCH)

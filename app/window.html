@@ -114,10 +114,13 @@ function loginCard(){
 function waRows(list,max){return list.slice(0,max).map(r=>`<div class=row><div class=n>${esc(r.name)}</div><div class=c>${esc([r.category,r.city].filter(Boolean).join(' · '))}${r.src=='官网'?' · 官网上写的':''}</div><div class=w>WhatsApp ${esc(r.wa)}</div></div>`).join('')}
 function step(n,cur,title,detail){const cls=cur>n?'d1':cur==n?'d2':'d3';return `<div class=st><span class="dot ${cls}">${cur>n?'✓':n}</span><div style="${cur<n?'color:#999':''}">${cur==n?'<b>'+title+'</b>':title}${detail?'<div class=small style="'+(cur==n?'color:#1f1f1f':'')+'">'+detail+'</div>':''}</div></div>`}
 function fmt(s){s=Math.max(0,s|0);return String(s/3600|0).padStart(2,'0')+':'+String(s/60%60|0).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+async function switchAcct(){if(S.state=='running'){alert('抓取中，等这次跑完再换账号');return}
+ if(!confirm('换账号：当前 WhatsApp 会退出登录（手机上的关联也会取消），然后用新的号扫码。继续吗？'))return
+ await fetch('/logout',{method:'POST'});S.me='';render()}
 function render(){
  const running=S.state=='running';go.disabled=running;go.textContent=running?'抓取中…':'开始抓取';
  const sm=R&&R.sm;sub.textContent=sm?`已抓 ${sm.done} / ${sm.total.toLocaleString()} 格`+(sm.next_city?` · 下次从 ${sm.next_city} 第 ${sm.next_n} 格开始`:' · 全部抓完'):'';
- foot.innerHTML='<span style="float:right;color:#b0b3b8">版本 '+esc(S.version)+'</span>WhatsApp：'+(S.me?`<span class=wa>已登录 ${esc(S.me)}</span>`:'未登录');
+ foot.innerHTML='<span style="float:right;color:#b0b3b8">版本 '+esc(S.version)+'</span>WhatsApp：'+(S.me?`<span class=wa>已登录 ${esc(S.me)}</span> <span class=ul style="margin-left:10px;cursor:pointer" onclick="switchAcct()">换账号</span>`:'未登录');
  let h='';
  if(!S.me&&!running) h=loginCard();
  if(running){const c=S.step||1;

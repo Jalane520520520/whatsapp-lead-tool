@@ -229,6 +229,24 @@ def login():
     return jsonify(ok=True)
 
 
+@app.post("/logout")
+def logout():
+    """换账号 (client 11-14: logged in with his main number, wants a spare one): unlink on the phone, forget the login."""
+    import shutil
+    with lock:
+        if L["proc"] is not None and L["proc"].poll() is None: L["proc"].terminate(); L["proc"].wait(5)
+        L["proc"] = None
+        if me():
+            try: subprocess.run([paths.NODE, "check.js", "--logout"], cwd=WA, env=paths.child_env(), timeout=40,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except (subprocess.TimeoutExpired, OSError): pass
+        shutil.rmtree(os.path.dirname(CREDS), ignore_errors=True)       # wa_auth/auth: the saved login
+        for f in (QR, PAIR):
+            try: os.remove(f)
+            except OSError: pass
+    return jsonify(ok=True)
+
+
 @app.get("/qr.png")
 def qr():
     if not os.path.exists(QR): abort(404)
