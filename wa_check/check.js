@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import http from 'node:http'
 import https from 'node:https'
 import tls from 'node:tls'
+import { randomBytes } from 'node:crypto'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 // Libraries load by absolute path: after a hot update this file sits in %LOCALAPPDATA%\...\app\<ver>\ while node_modules
@@ -53,10 +54,15 @@ function webVersion(agent) {  // agent undefined = direct
 // VPNs in TUN mode (虚拟网卡) carry direct traffic while the proxy port may be dead or stale, so try BOTH routes
 // and use whichever answers. Without a proxy this is just the direct route, as before.
 let ROUTE_AGENT = AGENT, ROUTE = PROXY ? 'proxy' : 'direct'
+// 11-14: on the client's PC (FlClash) Edge links fine but our scans never arrived while we used route=proxy.
+// So when a whole QR round ends with no scan, the next round tries the OTHER route; a route that linked is saved.
+const ROUTE_FILE = path.join(process.env.WA_STATE || HERE, 'route.txt')
+let preferDirect = (() => { try { return fs.readFileSync(ROUTE_FILE, 'utf-8').trim() === 'direct' } catch { return false } })()
 async function pickRoute() {
   const [viaProxy, viaDirect] = await Promise.all([PROXY ? webVersion(AGENT) : null, webVersion(false)])
-  if (viaProxy) { ROUTE_AGENT = AGENT; ROUTE = 'proxy' }
-  else if (viaDirect) { ROUTE_AGENT = undefined; ROUTE = 'direct' }
+  const useDirect = viaDirect && (preferDirect || !viaProxy)
+  if (useDirect) { ROUTE_AGENT = undefined; ROUTE = 'direct' }
+  else if (viaProxy) { ROUTE_AGENT = AGENT; ROUTE = 'proxy' }
   return viaProxy || viaDirect
 }
 
@@ -186,6 +192,10 @@ async function main() {
 
   const stop = msg => { fatal = msg; waiters.forEach(w => w()); waiters = [] }
 
+  // QR = https://wa.me/settings/linked_devices#ref,noiseKey,identityKey,advSecret,platform
+  let lastQR = null
+  const withAdv = qr => { const [head, body] = qr.split('#'); if (!body) return qr
+    const f = body.split(','); if (f.length >= 4) f[3] = state.creds.advSecretKey; return head + '#' + f.join(',') }
   async function connect() {
     // WhatsApp rejects links from an old web version ("check your connection"); ask web.whatsapp.com first
     let version = await pickRoute(), source = 'live'
@@ -194,6 +204,21 @@ async function main() {
     // source= is read by server.py /status: anything but live means the phone may refuse the scan
     llog(`connect, proxy ${PROXY ? PROXY.host + ':' + PROXY.port : 'none'} route=${ROUTE}, wa version ${version ? version.join('.') : 'default'} source=${source}`)
     sock = makeWASocket({ version, auth: state, logger, agent: ROUTE_AGENT, printQRInTerminal: false, markOnlineOnConnect: false, syncFullHistory: false })
+    // 11-13: since ~07-28 WhatsApp sends <notification type=companion_reg_refresh> after a scan and expects the
+    // companion to mint a new adv secret and show a QR advertising it. Baileys 7.0.0-rc14 ignores it (and its ack
+    // throws before pairing because creds.me is unset), so every scan fails: phone says "invalid QR / check your
+    // connection", log ends "QR refs attempts ended". Same fix as Baileys PR #2765 (issue #2737), done here so it
+    // ships as a hot update without touching the installed node_modules.
+    sock.ws.on('CB:notification,type:companion_reg_refresh', async node => {
+      llog(`companion_reg_refresh id=${node.attrs?.id} registered=${!!state.creds.me}`)
+      try { await sock.sendNode({ tag: 'ack', attrs: { id: node.attrs.id, to: node.attrs.from, class: 'notification', ...(node.attrs.type ? { type: node.attrs.type } : {}) } }) }
+      catch (e) { llog(`companion_reg_refresh ack failed ${e?.message}`) }
+      if (state.creds.me) return             // registered session: keep the secret (PR #2765)
+      state.creds.advSecretKey = randomBytes(32).toString('base64')
+      try { await saveCreds() } catch {}
+      if (lastQR) QRCode.toFile(QR_PNG, withAdv(lastQR), { width: 400 }).catch(() => {})
+      llog('adv secret rotated, QR re-rendered')
+    })
     sock.ev.on('creds.update', u => {
       // pairing reached us = the phone's scan got through; no such line after a scan = it never arrived
       if (u.me || u.registered !== undefined || u.pairingCode) llog(`creds me=${u.me?.id ?? '-'} registered=${u.registered ?? '-'} platform=${u.platform ?? '-'}`)
@@ -217,12 +242,14 @@ async function main() {
           return
         }
         console.log('Scan the QR on the page (WhatsApp > Linked devices), saved as qr.png')
-        QRCode.toFile(QR_PNG, u.qr, { width: 400 }).catch(() => {})
+        lastQR = u.qr
+        QRCode.toFile(QR_PNG, withAdv(u.qr), { width: 400 }).catch(() => {})
       }
-      if (u.connection === 'open') { open = true; attempt = 0; try { fs.rmSync(QR_PNG, { force: true }); fs.rmSync(PAIR_TXT, { force: true }) } catch {} console.log('Connected.'); waiters.forEach(w => w()); waiters = [] }
+      if (u.connection === 'open') { try { fs.writeFileSync(ROUTE_FILE, ROUTE) } catch {} llog(`linked/open on route=${ROUTE}`); open = true; attempt = 0; try { fs.rmSync(QR_PNG, { force: true }); fs.rmSync(PAIR_TXT, { force: true }) } catch {} console.log('Connected.'); waiters.forEach(w => w()); waiters = [] }
       if (u.connection === 'close') {
         open = false
         const code = u.lastDisconnect?.error?.output?.statusCode
+        if (/QR refs attempts ended/.test(u.lastDisconnect?.error?.message || '') && PROXY) { preferDirect = ROUTE !== 'direct'; llog(`no scan arrived on route=${ROUTE}; next round tries ${preferDirect ? 'direct' : 'proxy'}`) }
         try { const d = u.lastDisconnect?.error?.data; if (d) llog(`close data ${JSON.stringify(d).slice(0, 300)}`) } catch {}
         if (code === DisconnectReason.loggedOut || STOP_CODES.has(code) ) return stop(`STOPPED: account restricted or logged out (status ${code})`)
         const delay = Math.min(60000, 2000 * 2 ** attempt++)
