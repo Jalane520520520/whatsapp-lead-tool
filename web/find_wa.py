@@ -106,6 +106,35 @@ async def process(crawler, url, region):
         res["wa_evidence"] = " | ".join(v[1] for v in nums.values())[:120]
     return res
 
+def _fallback_exe():
+    """A Chromium that is really on disk: headless shell first, then full Chromium, newest build first."""
+    import glob
+    root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or (
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright") if os.name == "nt"
+        else os.path.expanduser("~/Library/Caches/ms-playwright") if sys.platform == "darwin" else os.path.expanduser("~/.cache/ms-playwright"))
+    pats = ["chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell.exe", "chromium_headless_shell-*/chrome-headless-shell-*/chrome-headless-shell",
+            "chromium-*/chrome-win64/chrome.exe", "chromium-*/chrome-mac*/*.app/Contents/MacOS/*", "chromium-*/chrome-linux*/chrome"]
+    for pat in pats:
+        hits = sorted(glob.glob(os.path.join(root, pat)), reverse=True)
+        if hits: return hits[0]
+    return ""
+
+
+def _use_installed_browser():
+    """11-14 client: the installer ships chromium(_headless_shell)-1228 but Playwright 1.63 looks for headless_shell-1243,
+    so the website step crashed with "Executable doesn't exist". When the expected browser is missing, launch the one we have."""
+    from playwright.async_api._generated import BrowserType
+    orig = BrowserType.launch
+    async def launch(self, *a, **k):
+        if not k.get("executable_path") and self.name == "chromium" and not os.path.exists(self.executable_path):
+            exe = _fallback_exe()
+            if exe:
+                k["executable_path"] = exe
+                print(f"[website] browser {os.path.basename(os.path.dirname(os.path.dirname(exe)))} (expected one missing)", flush=True)
+        return await orig(self, *a, **k)
+    BrowserType.launch = launch
+
+
 async def main(inp, out, region="GB"):
     rows = list(csv.DictReader(open(inp, encoding="utf-8")))
     done = {}
@@ -114,10 +143,8 @@ async def main(inp, out, region="GB"):
             done[r["place_id"]] = r
     fields = list(rows[0].keys()) + NEW_COLS
     t0 = time.time(); timings = []
-    # 11-14 client in China: route the browser through the VPN proxy too (Playwright ignores the system proxy)
-    px = os.environ.get("WAT_PROXY", "").strip()
-    px = (px if "://" in px else "http://" + px) if px and not px.startswith("socks") else None
-    bc = BrowserConfig(headless=True, verbose=False, **({"proxy_config": {"server": px}} if px else {}))
+    _use_installed_browser()
+    bc = BrowserConfig(headless=True, verbose=False)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader()
         async with AsyncWebCrawler(config=bc) as crawler:

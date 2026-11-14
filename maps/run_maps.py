@@ -101,11 +101,6 @@ def main():
         cmd = [binary(), "-input", qf, "-results", raw, "-grid-bbox", ",".join(map(str, bbox)),
                "-grid-cell", str(a.cell_km), "-zoom", str(zoom), "-depth", str(a.depth),
                "-c", str(a.concurrency), "-exit-on-inactivity", a.inactivity]
-        # 11-14 client in China: gosom's browser ignores the Windows system proxy, so Google Maps was unreachable
-        # (stuck at 3/21,933 cells, 0 results). Hand it the VPN proxy the same way check.js gets it.
-        px = os.environ.get("WAT_PROXY", "").strip()
-        if px and not px.startswith("socks"):
-            cmd += ["-proxies", px if "://" in px else "http://" + px]
         print(f"engine=gosom cells~{cells} zoom={zoom} bbox={bbox}\n{' '.join(cmd)}", flush=True)
         subprocess.run(cmd, check=False)
         rows = list(csv.DictReader(open(raw, encoding="utf-8"))) if os.path.exists(raw) else []
