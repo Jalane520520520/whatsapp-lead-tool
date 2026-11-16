@@ -3,6 +3,9 @@ pipeline.py + gosom + Chromium running; the reopened window started a second cra
 import os, subprocess, sys, time
 
 WIN = sys.platform.startswith("win")
+# 11-16 boss: black console windows popped up while it ran. The window runs under pythonw (no console); each console
+# program it starts (gosom, node, python) got its own. CREATE_NO_WINDOW gives them a hidden one their children share.
+NO_WINDOW = 0x08000000 if WIN else 0
 
 
 def alive(pid):
@@ -51,7 +54,7 @@ def kill_tree(pid):
     if not pid: return
     if WIN:
         subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       creationflags=0x08000000)             # CREATE_NO_WINDOW
+                       creationflags=NO_WINDOW)
     else:
         import signal
         try: pg = os.getpgid(int(pid))

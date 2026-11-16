@@ -102,7 +102,8 @@ def main():
                "-grid-cell", str(a.cell_km), "-zoom", str(zoom), "-depth", str(a.depth),
                "-c", str(a.concurrency), "-exit-on-inactivity", a.inactivity]
         print(f"engine=gosom cells~{cells} zoom={zoom} bbox={bbox}\n{' '.join(cmd)}", flush=True)
-        subprocess.run(cmd, check=False)
+        subprocess.run(cmd, check=False,   # no black console window for gosom (11-16 boss)
+                       creationflags=0x08000000 if sys.platform.startswith("win") else 0)
         rows = list(csv.DictReader(open(raw, encoding="utf-8"))) if os.path.exists(raw) else []
     wall = time.time() - t0
     seen, out, clipped = set(), [], 0

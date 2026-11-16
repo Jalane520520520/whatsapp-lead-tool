@@ -75,7 +75,7 @@ def table_summary(cc, kws):
 
 def open_path(p):
     if sys.platform.startswith("win"): os.startfile(p)  # noqa
-    else: subprocess.Popen(["open", p])
+    else: subprocess.Popen(["open", p], creationflags=proc.NO_WINDOW)
 
 
 def PAGE():
@@ -208,7 +208,7 @@ def start():
         with open(logp, "w", encoding="utf-8") as logf:
             p = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                  env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"),
-                                 start_new_session=not proc.WIN)
+                                 start_new_session=not proc.WIN, creationflags=proc.NO_WINDOW)
         S["gen"] += 1
         S.update(state="running", proc=p, pid=None, log=[], kws=kws, cc=cc, excel=None)
         os.makedirs(C.DATA, exist_ok=True)
@@ -356,7 +356,8 @@ def login():
             try: os.remove(f)
             except OSError: pass
         cmd = [paths.NODE, "check.js", "--login-only"] + (["--pair", phone] if phone else [])
-        L["proc"] = subprocess.Popen(cmd, cwd=WA, env=paths.child_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        L["proc"] = subprocess.Popen(cmd, cwd=WA, env=paths.child_env(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     creationflags=proc.NO_WINDOW)
     return jsonify(ok=True)
 
 
@@ -369,7 +370,7 @@ def logout():
         L["proc"] = None
         if me():
             try: subprocess.run([paths.NODE, "check.js", "--logout"], cwd=WA, env=paths.child_env(), timeout=40,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=proc.NO_WINDOW)
             except (subprocess.TimeoutExpired, OSError): pass
         shutil.rmtree(os.path.dirname(CREDS), ignore_errors=True)       # wa_auth/auth: the saved login
         for f in (QR, PAIR):

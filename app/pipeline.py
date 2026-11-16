@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cells as C
 
 import paths
+import proc
 HERE = C.HERE
 TOOL = C.TOOL
 PY = sys.executable
@@ -35,7 +36,7 @@ def run_tee(cmd, cwd=None, quiet=False):
     """Run in its own process group, echo output, return (returncode, browser-crash lines)."""
     global CHILD
     CHILD = p = subprocess.Popen(cmd, cwd=cwd, env=paths.child_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                                 errors="replace", start_new_session=True)
+                                 errors="replace", start_new_session=True, creationflags=proc.NO_WINDOW)
     crashes = 0
     for line in p.stdout:
         if "SIGTRAP" in line or "Target page, context or browser has been closed" in line or "target closed" in line.lower():
