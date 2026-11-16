@@ -24,13 +24,11 @@ if ($LASTEXITCODE) { throw 'get-pip failed' }
 if ($LASTEXITCODE) { throw 'pip install failed' }
 # 瘦身 A：crawl4ai 自带的 AI / 大模型 / 隐身模式依赖，我们查官网只用最基本的打开网页（find_wa.py），启动时也不加载它们
 & "$PKG\python\python.exe" -m pip uninstall -y patchright unclecode-litellm openai tokenizers hf-xet huggingface_hub scipy nltk networkx trimesh shapely alphashape
-& "$PKG\python\python.exe" -c "from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode; import webview, flask, openpyxl, phonenumbers; print('trimmed imports ok')"
+& "$PKG\python\python.exe" -c "from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode; import webview, flask, openpyxl, phonenumbers; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey; print('trimmed imports ok')"
 if ($LASTEXITCODE) { throw '瘦身后 import 失败' }
 
-# 3. 浏览器：用 playwright 装它自己要的那个 Chromium 版本，放进包里的 browsers\
-$env:PLAYWRIGHT_BROWSERS_PATH = "$PKG\browsers"
-& "$PKG\python\python.exe" -m playwright install chromium-headless-shell   # 查官网只用无界面版；完整版 432 MB 不装
-if ($LASTEXITCODE) { throw 'playwright install failed' }
+# 3. 浏览器：1.1.0 起不装（PLAN E，老板 11-17 批）。两步都用客户电脑自带的 Edge（app/browser.py 选：Edge -> Chrome ->
+#    从 npmmirror 下 Chrome for Testing）。客户电脑 11-17 实测：地图 13 = 13 家相同，官网 Edge 11 个 WhatsApp vs 自带 4 个。
 
 # 4. 便携 Node v24.22.0（nodejs.org 官方 zip）+ Baileys（npm ci 按 package-lock.json 装，版本和 Mac 上一样）
 Get 'https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip' "$TMP\node.zip"
@@ -49,23 +47,25 @@ Remove-Item -Recurse -Force "$PKG\node\node_modules\npm", "$PKG\node\node_module
 #    补丁只在 Windows 上去掉这几个参数；GitHub Windows 实测 London#2 10/10 过。需要 Go（build.yml 里 setup-go）。
 git clone --quiet --depth 1 --branch v1.18.1 https://github.com/gosom/google-maps-scraper.git "$TMP\gosom-src"
 git clone --quiet --depth 1 --branch v1.4.0 https://github.com/gosom/scrapemate.git "$TMP\scrapemate-src"
-git -C "$TMP\scrapemate-src" apply "$PWD\build\scrapemate-winargs.patch"
+git -C "$TMP\scrapemate-src" apply "$PWD\build\scrapemate-winargs-edge.patch"   # + WAT_BROWSER_CHANNEL / WAT_BROWSER_EXE
 if ($LASTEXITCODE) { throw 'scrapemate patch failed' }
 New-Item -ItemType Directory -Force "$PKG\gosom" | Out-Null
 Push-Location "$TMP\gosom-src"
 go mod edit "-replace=github.com/gosom/scrapemate=$TMP\scrapemate-src"
 go mod tidy
-go build -o "$PKG\gosom\gosom-1.18.1-winargs.exe" .
+go build -o "$PKG\gosom\gosom-1.18.1-winargs-edge.exe" .
 if ($LASTEXITCODE) { Pop-Location; throw 'gosom build failed' }
 Pop-Location
-# gosom 自己的驱动和 Chromium 也装进包（否则客户第一次运行要从 cdn.playwright.dev 下载 ~114 MB，国内可能失败）
+# gosom 自己的驱动装进包（否则客户第一次运行要从国外下载）。它顺带下的 Chromium 放临时目录，不进包。
 $env:PLAYWRIGHT_DRIVER_PATH = "$PKG\pw-driver"
+$env:PLAYWRIGHT_BROWSERS_PATH = "$TMP\gosom-browsers"
 $env:PLAYWRIGHT_INSTALL_ONLY = '1'
-& "$PKG\gosom\gosom-1.18.1-winargs.exe"
+& "$PKG\gosom\gosom-1.18.1-winargs-edge.exe"
 if ($LASTEXITCODE) { throw 'gosom playwright install failed' }
 Remove-Item Env:PLAYWRIGHT_INSTALL_ONLY
+Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH
 if (-not (Test-Path "$PKG\pw-driver")) { throw 'gosom driver not in package' }
-# 不删 chromium-1228 完整版：gosom 每次启动都检查它在不在，不在就从 cdn.playwright.dev 重新下载（10-21 run 39547391421 实测）
+if (Test-Path "$PKG\browsers") { throw 'Chromium got into the package (1.1.0 uses Edge)' }
 
 # 6. 出厂代码 + 启动器
 $CODE = 'VERSION', 'app', 'maps', 'web', 'wa_check'
@@ -91,4 +91,3 @@ Write-Host ("pkg ready: v{0}, {1:N0} MB" -f $V, $size)
 # 每个零件多大（找安装包太大的原因）
 Get-ChildItem $PKG -Directory | ForEach-Object { '{0,8:N0} MB  {1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }
 Get-ChildItem "$PKG\python\Lib\site-packages" -Directory | ForEach-Object { [pscustomobject]@{MB=[math]::Round((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB); Name=$_.Name} } | Sort-Object MB -Descending | Select-Object -First 15 | ForEach-Object { Write-Host ('{0,8} MB  site-packages\{1}' -f $_.MB, $_.Name) }
-Get-ChildItem "$PKG\browsers" -Directory | ForEach-Object { '{0,8:N0} MB  browsers\{1}' -f ((Get-ChildItem $_.FullName -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), $_.Name }

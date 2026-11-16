@@ -1,25 +1,43 @@
 diff --git a/adapters/fetchers/jshttp/jshttp.go b/adapters/fetchers/jshttp/jshttp.go
-index 2ced968..46575eb 100644
+index 2ced968..29f9c5c 100644
 --- a/adapters/fetchers/jshttp/jshttp.go
 +++ b/adapters/fetchers/jshttp/jshttp.go
-@@ -321,6 +321,8 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
+@@ -58,6 +58,11 @@ func New(params JSFetcherOptions) (scrapemate.HTTPFetcher, error) {
+ 		},
+ 	}
+ 
++	// WAT_BROWSER_CHANNEL=msedge / WAT_BROWSER_EXE=<path>: drive a browser already on the PC, so no Chromium is bundled or downloaded.
++	if browserChannel() != "" || browserExe() != "" {
++		opts[0].SkipInstallBrowsers = true
++	}
++
+ 	if err := playwright.Install(opts...); err != nil {
+ 		return nil, err
+ 	}
+@@ -321,6 +326,13 @@ func newBrowser(pw *playwright.Playwright, headless, disableImages bool, proxyPo
  		opts.Args = append(opts.Args, `--blink-settings=imagesEnabled=false`)
  	}
  
 +	opts.Args = platformArgs(opts.Args)
++	if exe := browserExe(); exe != "" {
++		opts.ExecutablePath = playwright.String(exe)
++	} else if ch := browserChannel(); ch != "" {
++		opts.Channel = playwright.String(ch)
++	}
 +
  	br, err := pw.Chromium.Launch(opts)
  	if err != nil {
  		return nil, err
 diff --git a/adapters/fetchers/jshttp/winargs.go b/adapters/fetchers/jshttp/winargs.go
 new file mode 100644
-index 0000000..31fc12f
+index 0000000..f627fd4
 --- /dev/null
 +++ b/adapters/fetchers/jshttp/winargs.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,40 @@
 +package jshttp
 +
 +import (
++	"os"
 +	"runtime"
 +	"strings"
 +)
@@ -45,4 +63,14 @@ index 0000000..31fc12f
 +	}
 +
 +	return out
++}
++
++// browserChannel is the installed browser to drive instead of the bundled Chromium ("msedge", "chrome"), or "".
++func browserChannel() string {
++	return os.Getenv("WAT_BROWSER_CHANNEL")
++}
++
++// browserExe is a Chromium the app downloaded itself (no Edge/Chrome on the PC), or "".
++func browserExe() string {
++	return os.Getenv("WAT_BROWSER_EXE")
 +}

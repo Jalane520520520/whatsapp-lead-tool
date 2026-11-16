@@ -1,5 +1,5 @@
 """启动器（装进安装包，永远不热更新）。PLAN v1.4 第 2 步；做法照 live-id-grabber/loader.js（客户安卓机上实际跑过）：
-远程（GitHub API，5 秒）-> 本机缓存 -> 安装包内置。启动器不放业务逻辑，所以它永远不用更新。
+远程（1.1.0 起：Gitee 签名清单 5 秒，不行再 GitHub API 5 秒）-> 本机缓存 -> 安装包内置。启动器不放业务逻辑，所以它永远不用更新。
 这里多一步：一整包代码（app.zip），下载后检查该有的文件都在、版本号对得上，否则不换。"""
 import json, os, shutil, sys, tempfile, threading, urllib.request, zipfile
 
@@ -31,31 +31,71 @@ def local():
     return bv, BUILTIN
 
 
-def update(cur):
-    """Ask GitHub API (instant; raw.githubusercontent.com caches for minutes - live-id-grabber 实测)."""
-    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
-                                 headers={"Accept": "application/vnd.github+json", "User-Agent": "wat-launcher"})
-    rel = json.load(urllib.request.urlopen(req, timeout=5))
+GITEE = "https://raw.giteeusercontent.com/Jalane/whatsapp-lead-update/raw/master/"   # PLAN E 11-17: 国内能直连
+PUBKEY = "aTYJQu13U0NvufHXrG5eXkVO+RmiLMLwMANlAfLt0kY="   # Ed25519; private key only on our Mac (.env WAT_UPDATE_SIGNING_KEY)
+
+
+def fetch(url, timeout, headers=None):
+    req = urllib.request.Request(url, headers={"User-Agent": "wat-launcher", **(headers or {})})
+    with urllib.request.urlopen(req, timeout=timeout) as r: return r.read()
+
+
+def install_zip(data, tag, tmp):
+    """Unpack a downloaded app.zip into APPS/<tag> and switch to it - only after every check passed."""
+    zp = os.path.join(tmp, "app.zip")
+    with open(zp, "wb") as f: f.write(data)
+    with zipfile.ZipFile(zp) as z:
+        names = set(z.namelist())
+        missing = [m for m in MUST_HAVE if m not in names]
+        if missing: raise ValueError(f"app.zip 缺 {missing}")
+        if any(n.startswith("/") or ".." in n.split("/") for n in names): raise ValueError("app.zip 路径不安全")
+        stage = os.path.join(tmp, "x"); z.extractall(stage)
+    if open(os.path.join(stage, "VERSION"), encoding="utf-8").read().strip() != tag: raise ValueError("VERSION 和标签不一致")
+    dest = os.path.join(APPS, tag)
+    shutil.rmtree(dest, ignore_errors=True); shutil.move(stage, dest)
+    with open(os.path.join(APPS, "current.txt"), "w", encoding="utf-8") as f: f.write(tag)   # switch only after all checks
+    return tag
+
+
+def from_gitee(cur, tmp):
+    """Signed manifest on Gitee (copied from 余彩益): current.json = {payload: base64(json), sig: base64(Ed25519)}.
+    payload = {app, version, zip, sha256, size}. A wrong signature, app, size or sha256 is refused."""
+    import base64, hashlib
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    m = json.loads(fetch(GITEE + "current.json", 5))
+    payload = base64.b64decode(m["payload"])
+    Ed25519PublicKey.from_public_bytes(base64.b64decode(PUBKEY)).verify(base64.b64decode(m["sig"]), payload)
+    p = json.loads(payload)
+    if p.get("app") != "whatsapp-lead-tool": raise ValueError("清单不是本软件的")
+    tag = p["version"]
+    if ver(tag) <= ver(cur): return None
+    if "/" in p["zip"] or ".." in p["zip"]: raise ValueError("清单里的文件名不安全")
+    data = fetch(GITEE + p["zip"], 60)
+    if len(data) != p["size"] or hashlib.sha256(data).hexdigest() != p["sha256"]: raise ValueError("app.zip 和清单对不上")
+    return install_zip(data, tag, tmp)
+
+
+def from_github(cur, tmp):
+    """GitHub API (instant; raw.githubusercontent.com caches for minutes - live-id-grabber 实测). Needs the client's VPN."""
+    rel = json.loads(fetch(f"https://api.github.com/repos/{REPO}/releases/latest", 5, {"Accept": "application/vnd.github+json"}))
     tag = rel["tag_name"].lstrip("v")
     if ver(tag) <= ver(cur): return None
     asset = next(a for a in rel["assets"] if a["name"] == "app.zip")
-    tmp = tempfile.mkdtemp(prefix="wat_")
-    try:
-        zp = os.path.join(tmp, "app.zip")
-        with urllib.request.urlopen(asset["browser_download_url"], timeout=60) as r, open(zp, "wb") as f: shutil.copyfileobj(r, f)
-        with zipfile.ZipFile(zp) as z:
-            names = set(z.namelist())
-            missing = [m for m in MUST_HAVE if m not in names]
-            if missing: raise ValueError(f"app.zip 缺 {missing}")
-            if any(n.startswith("/") or ".." in n.split("/") for n in names): raise ValueError("app.zip 路径不安全")
-            stage = os.path.join(tmp, "x"); z.extractall(stage)
-        if open(os.path.join(stage, "VERSION"), encoding="utf-8").read().strip() != tag: raise ValueError("VERSION 和标签不一致")
-        dest = os.path.join(APPS, tag)
-        shutil.rmtree(dest, ignore_errors=True); shutil.move(stage, dest)
-        with open(os.path.join(APPS, "current.txt"), "w", encoding="utf-8") as f: f.write(tag)   # switch only after all checks
-        return tag
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+    return install_zip(fetch(asset["browser_download_url"], 60), tag, tmp)
+
+
+def update(cur):
+    """Gitee first (国内直连), GitHub second. Returns (new_tag or None, source, problems)."""
+    problems = []
+    for name, fn in (("gitee", from_gitee), ("github", from_github)):
+        tmp = tempfile.mkdtemp(prefix="wat_")
+        try:
+            return fn(cur, tmp), name, problems
+        except Exception as e:
+            problems.append(f"{name}: {type(e).__name__}: {e}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    raise RuntimeError("; ".join(problems))
 
 
 def main():
@@ -63,19 +103,21 @@ def main():
     cur, _ = local()
     box = {}
     def job():
-        try: box["new"] = update(cur)
+        try: box["new"], box["src"], box["problems"] = update(cur)
         except Exception as e: box["err"] = f"{type(e).__name__}: {e}"
     t = threading.Thread(target=job, daemon=True); t.start(); t.join(75)   # 5 s to ask; a found update may take longer to download
     if "err" in box: log(f"update skipped ({box['err']}); running {cur}")
-    elif box.get("new"): log(f"update: {cur} -> {box['new']}")
+    elif box.get("new"): log(f"update: {cur} -> {box['new']} (from {box['src']})")
     elif t.is_alive(): log(f"update timed out; running {cur}")
+    else: log(f"up to date {cur} (checked {box['src']})")
+    if box.get("problems"): log("  " + "; ".join(box["problems"]))
     v, code = local()
     os.environ.update(
         WAT_HOME=HOME,
         WAT_NODE=os.path.join(INSTALL, "node", "node.exe"),
         WAT_NODE_MODULES=os.path.join(INSTALL, "node_modules"),
-        WAT_GOSOM=os.path.join(INSTALL, "gosom", "gosom-1.18.1-winargs.exe"),
-        PLAYWRIGHT_BROWSERS_PATH=os.path.join(INSTALL, "browsers"),
+        WAT_GOSOM=os.path.join(INSTALL, "gosom", "gosom-1.18.1-winargs-edge.exe"),   # 1.1.0: can drive Edge (PLAN E)
+        PLAYWRIGHT_BROWSERS_PATH=os.path.join(HOME, "browsers"),   # 1.1.0 ships no Chromium; app/browser.py picks Edge
         PLAYWRIGHT_DRIVER_PATH=os.path.join(INSTALL, "pw-driver"),    # gosom 的驱动，打包时已装好
         WAT_VERSION=v)
     sys.path.insert(0, os.path.join(code, "app"))

@@ -120,14 +120,15 @@ def _fallback_exe():
     return ""
 
 
-def _use_installed_browser():
+def _use_installed_browser(exe_given=""):
     """11-14 client: the installer ships chromium(_headless_shell)-1228 but Playwright 1.63 looks for headless_shell-1243,
-    so the website step crashed with "Executable doesn't exist". When the expected browser is missing, launch the one we have."""
+    so the website step crashed with "Executable doesn't exist". When the expected browser is missing, launch the one we have.
+    exe_given (WAT_BROWSER_EXE, app/browser.py): always launch that one."""
     from playwright.async_api._generated import BrowserType
     orig = BrowserType.launch
     async def launch(self, *a, **k):
-        if not k.get("executable_path") and self.name == "chromium" and not os.path.exists(self.executable_path):
-            exe = _fallback_exe()
+        if not k.get("executable_path") and self.name == "chromium" and (exe_given or not os.path.exists(self.executable_path)):
+            exe = exe_given or _fallback_exe()
             if exe:
                 k["executable_path"] = exe
                 print(f"[website] browser {os.path.basename(os.path.dirname(os.path.dirname(exe)))} (expected one missing)", flush=True)
@@ -143,8 +144,13 @@ async def main(inp, out, region="GB"):
             done[r["place_id"]] = r
     fields = list(rows[0].keys()) + NEW_COLS
     t0 = time.time(); timings = []
-    _use_installed_browser()
-    bc = BrowserConfig(headless=True, verbose=False)
+    channel, exe = os.environ.get("WAT_BROWSER_CHANNEL", ""), os.environ.get("WAT_BROWSER_EXE", "")
+    if channel and not exe:   # app/browser.py picked Edge / Chrome (11-17 client: Edge found 11 WhatsApp vs 4)
+        bc = BrowserConfig(headless=True, verbose=False, chrome_channel=channel)
+        print(f"[website] browser {channel}", flush=True)
+    else:
+        _use_installed_browser(exe)
+        bc = BrowserConfig(headless=True, verbose=False)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader()
         async with AsyncWebCrawler(config=bc) as crawler:

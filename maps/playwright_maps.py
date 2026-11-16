@@ -121,7 +121,9 @@ async def collect(keyword, bbox, zoom, depth=2):
     url = f"https://www.google.com/maps/search/{quote_plus(keyword)}/@{lat},{lon},{zoom}z?hl=en"
     async with async_playwright() as pw:
         launch = {"headless": True}
-        if os.environ.get("WAT_BROWSER_CHANNEL"):
+        if os.environ.get("WAT_BROWSER_EXE"):
+            launch["executable_path"] = os.environ["WAT_BROWSER_EXE"]
+        elif os.environ.get("WAT_BROWSER_CHANNEL"):
             launch["channel"] = os.environ["WAT_BROWSER_CHANNEL"]
         browser = await pw.chromium.launch(**launch)
         search = await browser.new_page(locale="en-US", viewport={"width": 1280, "height": 900})

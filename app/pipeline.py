@@ -8,6 +8,7 @@ import argparse, csv, datetime, json, os, signal, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cells as C
 
+import browser
 import paths
 import proc
 HERE = C.HERE
@@ -277,6 +278,7 @@ def main():
     if args.city and not any(c["city"].lower() == args.city.lower() for c in prog["cells"]):
         sys.exit(f"city '{args.city}' not in the {args.country} list")
     log(f"data folder: {d}")
+    log(f"[browser] {browser.pick(paths.HOME, log)}")
     sm = C.summary(prog); log(f"progress before: {sm['done']}/{sm['total']} cells")
     master_p = os.path.join(d, "master.csv")
     master_ids = {r["place_id"] for r in read(master_p)}
