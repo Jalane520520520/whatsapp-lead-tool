@@ -14,6 +14,10 @@ def free_port():
 
 if __name__ == "__main__":
     port = free_port()
+    server.recover()          # a crawl from an earlier window still running -> follow it, never start a second one
     threading.Thread(target=lambda: server.app.run("127.0.0.1", port), daemon=True).start()
     webview.create_window("WhatsApp 客户提取", f"http://127.0.0.1:{port}/", width=1150, height=800, min_size=(900, 600))
-    webview.start()
+    try:
+        webview.start()
+    finally:
+        server.shutdown()     # 11-16: closing the window used to leave the crawl (gosom + Chromium) running

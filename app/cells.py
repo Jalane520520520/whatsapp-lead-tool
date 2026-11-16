@@ -110,6 +110,29 @@ def save_progress(country, keywords, prog):
             time.sleep(min(0.05 * 2 ** attempt, 0.5))
 
 
+def load_batch(d):
+    """batch.json: the 本次 batch the client chose {want, done, city, started, maps_finished} (11-16: reopen continues it)."""
+    try:
+        with open(os.path.join(d, "batch.json"), encoding="utf-8") as f: return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def save_batch(d, b):
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as f: json.dump(b, f, ensure_ascii=False)
+    for attempt in range(11):                     # same short retry as save_progress (a reader may hold it a moment)
+        try:
+            os.replace(tmp, os.path.join(d, "batch.json")); return
+        except PermissionError:
+            if attempt == 10:
+                try: os.remove(tmp)
+                except OSError: pass
+                return                            # the batch note is a convenience; never stop the crawl for it
+            time.sleep(min(0.05 * 2 ** attempt, 0.5))
+
+
 def summary(prog):
     cells = prog["cells"]
     done = sum(1 for c in cells if c.get("status") == "done")

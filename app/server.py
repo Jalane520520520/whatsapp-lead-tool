@@ -10,13 +10,17 @@ sys.path.insert(0, HERE)
 import cells as C
 import pipeline as P
 import paths
+import proc
 WA = os.path.join(TOOL, "wa_check")
 QR, PAIR, CREDS = os.path.join(paths.WA_STATE, "qr.png"), os.path.join(paths.WA_STATE, "pair_code.txt"), os.path.join(paths.WA_STATE, "auth", "creds.json")
 HIDDEN = os.path.join(C.DATA, "_hidden.json")
+RUNNING = os.path.join(C.DATA, "_running.json")   # the crawl now running: pid + its log (11-16: reopen must find it)
+UI = os.path.join(C.DATA, "_ui.json")             # the window's last 本次 cell count (11-16: it went back to 3)
+PIPELINE = [os.path.join(HERE, "pipeline.py")]
 CN = C.CN
 COUNTRIES = json.load(open(os.path.join(TOOL, "maps", "countries.json"), encoding="utf-8"))
 app = Flask(__name__)
-S = {"state": "idle", "proc": None, "log": [], "kws": None, "cc": None, "excel": None}
+S = {"state": "idle", "proc": None, "pid": None, "gen": 0, "log": [], "kws": None, "cc": None, "excel": None}
 L = {"proc": None}
 lock = threading.Lock()
 
@@ -44,6 +48,7 @@ def stage_info(lines):
         elif m := re.search(r"\[maps (\d+)/(\d+)\]", l): st["maps_i"] = int(m[1]) - 1; st["step"] = 1
         elif m := re.search(r"-> \w+: \d+ places, (\d+) new", l): st["new"] += int(m[1]); st["maps_i"] += 1
         elif m := re.search(r"\[website\] (\d+) new businesses", l): st["web_n"] = int(m[1]); st["step"] = 2
+        elif m := re.search(r"\[website\] (\d+) already checked", l): st["web_i"] += int(m[1])
         elif "[website] nothing new" in l: st["step"] = 2
         elif m := re.match(r"\s*([\d.]+)s https?://", l): st["web_i"] += 1; st["web_secs"].append(float(m[1]))
         elif m := re.search(r"\[whatsapp\] checking (\d+)", l): st["wa_n"] = int(m[1]); st["step"] = 3
@@ -78,25 +83,102 @@ def index():
     return Response(PAGE().replace("__OPTS__", opts), mimetype="text/html")
 
 
-def watch(p, logf):
-    # 11-14 client (Chinese Windows): pipeline printed GBK bytes, utf-8 decode raised inside this thread, the thread died
-    # and the window stayed on 抓取中 forever. Child now writes UTF-8 (PYTHONUTF8) and any odd byte is replaced, not fatal;
-    # whatever happens here, the state must leave "running".
-    rc = None
+def _line(line):
+    S["log"].append(line.rstrip()); S["log"] = S["log"][-600:]
+    if line.startswith(tuple("0123456789")) and "EXCEL:" in line: S["excel"] = line.split("EXCEL:", 1)[1].strip()
+
+
+def watch(logp, pid, p, gen):
+    """Follow the run's log file until the crawl ends. The pipeline writes the file itself (not a pipe to this window),
+    so a reopened window can follow a crawl it did not start. 11-14 client (Chinese Windows): an odd byte once killed
+    this thread and left the window on 抓取中; bytes are replaced, and whatever happens the state must leave "running"."""
+    rc, buf = None, ""
     try:
-        for line in p.stdout:
-            with lock:
-                S["log"].append(line.rstrip()); S["log"] = S["log"][-600:]
-                if line.startswith(tuple("0123456789")) and "EXCEL:" in line: S["excel"] = line.split("EXCEL:", 1)[1].strip()
-            logf.write(line); logf.flush()
-        rc = p.wait()
+        with open(logp, encoding="utf-8", errors="replace") as f:
+            while True:
+                chunk = f.readline()
+                if chunk:
+                    buf += chunk
+                    if buf.endswith("\n"):
+                        with lock:
+                            if S["gen"] != gen: return
+                            _line(buf)
+                        buf = ""
+                    continue
+                if (p.poll() is not None) if p else not proc.alive(pid):
+                    rest = buf + f.read()
+                    with lock:
+                        if S["gen"] != gen: return
+                        for line in rest.splitlines(): _line(line)
+                    break
+                time.sleep(0.3)
+        rc = p.wait() if p else None
     except Exception as e:
-        try: logf.write(f"WATCH_ERROR: {type(e).__name__}: {e}\n")
+        try: open(logp, "a", encoding="utf-8").write(f"WATCH_ERROR: {type(e).__name__}: {e}\n")
         except Exception: pass
     finally:
-        try: logf.close()
+        with lock:
+            if S["gen"] != gen: return
+            ok = S["excel"] and (rc in (0, 2) if p else any(re.search(r"\bDONE\b", l) for l in S["log"]))
+            S.update(state="done" if ok else "error", proc=None, pid=None)
+            _forget_running(p.pid if p else pid)
+
+
+def _forget_running(pid):
+    try:
+        if json.load(open(RUNNING, encoding="utf-8")).get("pid") == pid: os.remove(RUNNING)
+    except (OSError, ValueError): pass
+
+
+def recover():
+    """Window opened: if a crawl from an earlier window is still running (that window crashed or was killed), follow it
+    instead of letting a second crawl write the same progress.json / master.csv (11-16 client: Birmingham#238 twice)."""
+    try: r = json.load(open(RUNNING, encoding="utf-8"))
+    except (OSError, ValueError): return False
+    if not proc.ours(r.get("pid")):
+        _forget_running(r.get("pid")); return False
+    with lock:
+        if S["state"] == "running": return False
+        S["gen"] += 1
+        S.update(state="running", proc=None, pid=r["pid"], log=[], kws=r["kws"], cc=r["cc"], excel=None)
+        gen = S["gen"]
+    threading.Thread(target=watch, args=(r["log"], r["pid"], None, gen), daemon=True).start()
+    return True
+
+
+def shutdown():
+    """Window closed: stop the crawl and everything it started (gosom, Chromium, WhatsApp check). Finished cells are
+    already saved; the next open offers to continue the rest of the batch."""
+    with lock: p, pid = S["proc"], S["pid"]
+    pid = p.pid if p else pid
+    if pid:
+        proc.kill_tree(pid)
+        if p:
+            try: p.wait(5)
+            except Exception: pass
+        _forget_running(pid)
+    lp = L["proc"]
+    if lp is not None and lp.poll() is None:
+        try: lp.terminate(); lp.wait(5)
         except Exception: pass
-        with lock: S["state"] = "done" if rc in (0, 2) and S["excel"] else "error"
+
+
+def _ui():
+    try: return json.load(open(UI, encoding="utf-8"))
+    except (OSError, ValueError): return {}
+
+
+def batch_left(d):
+    """The batch the client chose last time in this data folder, if its cells did not all get crawled:
+    {want, done, left, city}. None when finished (or never started with this version)."""
+    b = C.load_batch(d)
+    if not b or b.get("maps_finished"): return None
+    left = int(b.get("want", 0)) - int(b.get("done", 0))
+    if left <= 0: return None
+    try:
+        if not C.summary(json.load(open(os.path.join(d, "progress.json"), encoding="utf-8")))["next_city"]: return None
+    except (OSError, ValueError): return None
+    return {"want": int(b["want"]), "done": int(b["done"]), "left": left, "city": b.get("city") or "", "started": b.get("started", "")}
 
 
 @app.post("/start")
@@ -108,16 +190,26 @@ def start():
     try: n = max(1, min(int(d.get("cells") or 3), 5000))
     except ValueError: return jsonify(ok=False, error="格数要填数字")
     city = (d.get("city") or "").strip()
+    b = batch_left(C.data_dir(cc, kws)) if d.get("resume") else None
+    if b: n, city = b["left"], b["city"]                        # 继续：same batch, only the cells it still lacks
     with lock:
         if S["state"] == "running": return jsonify(ok=False, error="已有任务在运行")
         run_dir = os.path.join(paths.RUNS, time.strftime("%Y%m%d_%H%M%S") + "_" + cc); os.makedirs(run_dir, exist_ok=True)
-        cmd = [sys.executable, os.path.join(HERE, "pipeline.py"), "--keywords", ";".join(kws), "--country", cc,
+        cmd = [sys.executable, *PIPELINE, "--keywords", ";".join(kws), "--country", cc,
                "--cells", str(n), "--run-dir", run_dir]           # Excel always goes to the one table of this keyword+country
         if city: cmd += ["--city", city]
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, encoding="utf-8",
-                             errors="replace", env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"))
-        S.update(state="running", proc=p, log=[], kws=kws, cc=cc, excel=None)
-        threading.Thread(target=watch, args=(p, open(os.path.join(run_dir, "log.txt"), "w", encoding="utf-8")), daemon=True).start()
+        if b: cmd += ["--keep-batch"]
+        logp = os.path.join(run_dir, "log.txt")
+        with open(logp, "w", encoding="utf-8") as logf:
+            p = subprocess.Popen(cmd, stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"),
+                                 start_new_session=not proc.WIN)
+        S["gen"] += 1
+        S.update(state="running", proc=p, pid=None, log=[], kws=kws, cc=cc, excel=None)
+        os.makedirs(C.DATA, exist_ok=True)
+        json.dump({"pid": p.pid, "log": logp, "kws": kws, "cc": cc, "started": time.time()}, open(RUNNING, "w", encoding="utf-8"))
+        if not b: json.dump(dict(_ui(), cells=n), open(UI, "w", encoding="utf-8"))
+        threading.Thread(target=watch, args=(logp, None, p, S["gen"]), daemon=True).start()
     hid = _hidden(); key = C.slug_for(cc, kws)
     if key in hid: hid.remove(key); _save_hidden(hid)
     return jsonify(ok=True)
@@ -150,8 +242,23 @@ def status():
 def results():
     cc, kws = request.args.get("country", "").upper(), kw_list(request.args.get("keywords"))
     if cc not in COUNTRIES or not kws: return jsonify(total=0, wa=[], sm=None)
-    _, rows, sm = table_summary(cc, kws)
-    return jsonify(total=len(rows), sm=sm, wa=[{k: r[k] for k in ("name", "wa", "src", "city", "category")} for r in rows if r["wa"]])
+    d, rows, sm = table_summary(cc, kws)
+    return jsonify(total=len(rows), sm=sm, batch=batch_left(d), wa=[{k: r[k] for k in ("name", "wa", "src", "city", "category")} for r in rows if r["wa"]])
+
+
+@app.get("/resume")
+def resume():
+    """Window opened: the last 本次 count, and the newest batch that did not finish (「上次 100 格跑到第 59 格」)."""
+    out, best, hid = {"last_cells": int(_ui().get("cells") or 3)}, None, _hidden()
+    for name in os.listdir(C.DATA) if os.path.isdir(C.DATA) else []:
+        d = os.path.join(C.DATA, name)
+        if name in hid or not os.path.isdir(d): continue
+        b = batch_left(d)
+        if b and (best is None or b["started"] > best[0]["started"]): best = (b, d)
+    if best:
+        prog = json.load(open(os.path.join(best[1], "progress.json"), encoding="utf-8"))
+        out.update(best[0], kws=prog["keywords"], cc=prog["country"])
+    return jsonify(out)
 
 
 def _hidden():

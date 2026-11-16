@@ -113,7 +113,9 @@ def website_step(d, country):
     rin, p1 = os.path.join(tmp, "web_in.csv"), os.path.join(tmp, "web_pass1.csv")
     with open(rin, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=MASTER_COLS, extrasaction="ignore"); w.writeheader(); w.writerows(todo)
-    if os.path.exists(p1): os.remove(p1)
+    # 11-16: keep web_pass1.csv from a run the client closed half-way; find_wa skips the sites already in it
+    already = {r["place_id"] for r in read(p1)} & {r["place_id"] for r in todo}
+    if already: log(f"[website] {len(already)} already checked before the window closed")
     rc, _ = run_tee([PY, "-c", code, web, rin, p1, country, "30000"], cwd=web)
     if rc != 0 and not read(p1):
         log("ERROR website step failed"); return
@@ -125,10 +127,12 @@ def website_step(d, country):
         rr, ro = os.path.join(tmp, "web_retry_in.csv"), os.path.join(tmp, "web_retry_out.csv")
         with open(rr, "w", encoding="utf-8", newline="") as f:
             w = csv.DictWriter(f, fieldnames=MASTER_COLS, extrasaction="ignore"); w.writeheader(); w.writerows(bad)
-        if os.path.exists(ro): os.remove(ro)
         run_tee([PY, "-c", code, web, rr, ro, country, "60000"], cwd=web)
         for r in read(ro): final[r["place_id"]] = r
     append_rows(cache_p, WEB_COLS, list(final.values()))
+    for f in (p1, os.path.join(tmp, "web_retry_out.csv")):     # saved in web_cache now; next batch starts clean
+        try: os.remove(f)
+        except OSError: pass
 
 
 # ---------------------------------------------------------------- step 3: WhatsApp check (new phones only)
@@ -248,6 +252,7 @@ def main():
     a.add_argument("--out", help="Excel path (default 表格/<国家> - <关键词>.xlsx)")
     a.add_argument("--run-dir", help="folder for this run's log/Excel (server uses it)")
     a.add_argument("--skip-wa-check", action="store_true")
+    a.add_argument("--keep-batch", action="store_true", help="continue last time's batch (window's 继续) instead of starting a new one")
     args = a.parse_args()
     args.country = args.country.upper()
     kws = [k.strip() for k in args.keywords.split(";") if k.strip()]
@@ -264,6 +269,10 @@ def main():
     master_ids = {r["place_id"] for r in read(master_p)}
     todo = [c for c in prog["cells"] if c.get("status") != "done" and (not args.city or c["city"].lower() == args.city.lower())][:max(0, args.cells)]
     log(f"this run: {len(todo)} cells" + (f" ({todo[0]['id']} .. {todo[-1]['id']})" if todo else ""))
+    batch = C.load_batch(d) if args.keep_batch else None
+    if not batch:
+        batch = {"want": args.cells, "done": 0, "city": args.city or "", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    batch["maps_finished"] = False; C.save_batch(d, batch)
     warnings = []
     for i, cell in enumerate(todo, 1):
         t0 = time.time()
@@ -275,8 +284,10 @@ def main():
             for r in new: master_ids.discard(r["place_id"])
         cell.update(status=status, rows=n_total, time=time.strftime("%Y-%m-%d %H:%M:%S"), secs=round(time.time() - t0))
         C.save_progress(args.country, kws, prog)
+        batch["done"] = int(batch.get("done", 0)) + 1; C.save_batch(d, batch)
         if warn: warnings.append(f"{cell['id']}: {warn}")
         log(f"  -> {status}: {n_total} places, {len(new)} new, {time.time() - t0:.0f}s (master now {len(master_ids)})")
+    batch["maps_finished"] = True; C.save_batch(d, batch)
     website_step(d, args.country)
     rc = wa_step(d, args.skip_wa_check)
     stats = build_excel(args, d, prog, warnings)
