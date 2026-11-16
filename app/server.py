@@ -52,7 +52,12 @@ def stage_info(lines):
         elif "[website] nothing new" in l: st["step"] = 2
         elif m := re.match(r"\s*([\d.]+)s https?://", l): st["web_i"] += 1; st["web_secs"].append(float(m[1]))
         elif m := re.search(r"\[whatsapp\] checking (\d+)", l): st["wa_n"] = int(m[1]); st["step"] = 3
-        elif "[whatsapp]" in l: st["step"] = 3; st["wa_note"] = "未登录，跳过" if "未登录" in l else "没有新号码"
+        elif "[whatsapp]" in l:
+            st["step"] = 3
+            if "403" in l: st["wa_note"] = "WhatsApp 断开了这个号"
+            elif m := re.search(r"剩 (\d+) 个", l): st["wa_note"] = f"剩 {m[1]} 个下次查"
+            else: st["wa_note"] = "未登录，跳过" if "未登录" in l else "没有新号码"
+        elif m := re.match(r"Pace: checking (\d+) now", l): st["wa_n"] = int(m[1])
         elif m := re.match(r"Checked (\d+)", l): st["wa_i"] += int(m[1])
         elif "EXCEL_LOCKED" in l: st["locked"] = l.split("另存为", 1)[-1].strip()
         elif re.search(r"\bDONE\b", l): st["step"] = 4
@@ -225,6 +230,13 @@ def wa_source():
     return ""
 
 
+def wa_blocked():
+    """403/401/406 code if WhatsApp dropped the last login (check.js wrote blocked.json and removed it); 0 otherwise."""
+    if me(): return 0
+    try: return int(json.load(open(os.path.join(paths.WA_STATE, "blocked.json"), encoding="utf-8")).get("code") or 0)
+    except (OSError, ValueError, TypeError): return 0
+
+
 @app.get("/status")
 def status():
     with lock:
@@ -235,7 +247,7 @@ def status():
     if L["proc"] is not None and not lr and not me():          # login ended without a link: show why on the page
         try: err = open(os.path.join(paths.WA_STATE, "login.log"), encoding="utf-8").read().strip().splitlines()[-1][25:200]
         except (OSError, IndexError): err = "登录程序没有启动"
-    return jsonify(**st, login_error=err, wa_source=wa_source(), proxy=paths.system_proxy(), version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
+    return jsonify(**st, login_error=err, wa_blocked=wa_blocked(), wa_source=wa_source(), proxy=paths.system_proxy(), version=os.environ.get("WAT_VERSION") or open(os.path.join(TOOL, "VERSION"), encoding="utf-8").read().strip(), me=me(), login_running=lr, qr=lr and os.path.exists(QR) and not pair, pair=pair)
 
 
 @app.get("/results")

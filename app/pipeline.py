@@ -140,9 +140,13 @@ def wa_step(d, skip):
     web = {r["place_id"]: r for r in read(os.path.join(d, "web_cache.csv"))}
     cache_p = os.path.join(d, "wa_cache.csv")
     have = {r["phone_e164"] for r in read(cache_p)}
-    nums = sorted({r["phone_e164"] for r in read(os.path.join(d, "master.csv"))
-                   if r.get("phone_e164") and r["phone_e164"] not in have
-                   and not first_num(web.get(r["place_id"], {}).get("wa_number_e164"))})
+    ptype = {r["phone_e164"]: r.get("phone_type", "") for r in read(os.path.join(d, "master.csv"))
+             if r.get("phone_e164") and r["phone_e164"] not in have
+             and not first_num(web.get(r["place_id"], {}).get("wa_number_e164"))}
+    # 11-16: mobiles first. Client's 1539 lookups: mobiles 125/161 on WhatsApp, landlines 29/1158; check.js now stops at
+    # 200 an hour / 600 a day, so the likely ones go in before the limit.
+    rank = {"mobile": 0, "fixed_line_or_mobile": 1}
+    nums = sorted(ptype, key=lambda n: (rank.get(ptype[n], 2), n))
     if skip:
         log(f"[whatsapp] check skipped ({len(nums)} new numbers would be checked)"); return 0
     if not nums:
@@ -157,8 +161,16 @@ def wa_step(d, skip):
     got = [{"phone_e164": r["phone_e164"], "on_whatsapp": "yes" if r["on_whatsapp"].strip().lower() in ("true", "yes", "1") else "no"}
            for r in read(nout) if r.get("on_whatsapp", "").strip()]
     append_rows(cache_p, ["phone_e164", "on_whatsapp"], got)
-    if rc != 0:
+    left = len(nums) - len({r["phone_e164"] for r in got})
+    if rc == 6:
+        log(f"[whatsapp] WhatsApp 断开了这个号（403），旧登录已清掉；{left} 个电话标为未检测。"
+            "请打开手机 WhatsApp 看有没有封号/限制提示，手机能正常用了，在窗口里重新扫码，再跑会补查")
+    elif rc == 5:
+        log(f"[whatsapp] 查号中途 WhatsApp 断开了，先停下保护账号；剩 {left} 个下次跑接着查")
+    elif rc != 0:
         log("STOPPED: WhatsApp check did not finish (login needed or account restricted). Run again after fixing.")
+    elif left:
+        log(f"[whatsapp] 为了不被 WhatsApp 封号，每小时最多查 200 个、24 小时最多 600 个；剩 {left} 个标为未检测，下次跑接着查")
     return rc
 
 
