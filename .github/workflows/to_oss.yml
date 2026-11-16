@@ -1,0 +1,27 @@
+# PLAN E (boss 11-17): copy a built installer from a CI run straight to our private OSS Guangzhou bucket.
+# The Mac and the Guangzhou server pull from GitHub at 0.19 / 0.03 MB/s, the build machine does not.
+# OSS_PUT_URL = a 1-hour signed PUT link for exactly one object (repo secret, masked); the bucket stays private.
+# Trigger: push to branch to-oss with build/to_oss_run.txt = "<run id>".
+name: to-oss
+on:
+  push:
+    branches: [to-oss]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 下载 CI 打的安装包
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          run=$(tr -d '[:space:]' < build/to_oss_run.txt)
+          gh run download "$run" -n installer -D inst -R "$GITHUB_REPOSITORY"
+          ls -l inst; sha256sum inst/*.exe
+      - name: 传到 OSS 广州（签名 PUT）
+        env: { OSS_PUT_URL: "${{ secrets.OSS_PUT_URL }}" }
+        run: |
+          f=$(ls inst/*.exe)
+          curl -sS --fail -T "$f" -H "Content-Type: application/octet-stream" -w "PUT http=%{http_code} bytes=%{size_upload} secs=%{time_total} speed=%{speed_upload}\n" "$OSS_PUT_URL"
