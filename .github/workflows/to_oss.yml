@@ -24,4 +24,4 @@ jobs:
         env: { OSS_PUT_URL: "${{ secrets.OSS_PUT_URL }}" }
         run: |
           f=$(ls inst/*.exe)
-          curl -sS --fail -T "$f" -H "Content-Type: application/octet-stream" -w "PUT http=%{http_code} bytes=%{size_upload} secs=%{time_total} speed=%{speed_upload}\n" "$OSS_PUT_URL"
+          curl -sS --fail -T "$f" -w "PUT http=%{http_code} bytes=%{size_upload} secs=%{time_total} speed=%{speed_upload}\n" "$OSS_PUT_URL"
