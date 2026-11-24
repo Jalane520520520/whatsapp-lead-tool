@@ -166,14 +166,17 @@ async def main(inp, out, region="GB"):
         async with AsyncWebCrawler(config=bc) as crawler:
             async def one(row):
                 url = (row.get("website") or "").strip()
-                if not url:
-                    res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "no_site"}
-                elif is_platform(url):
-                    res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "skipped_platform"}
-                else:
-                    async with sem:
-                        s = time.time(); res = await process(crawler, url, region); timings.append(time.time()-s)
-                    print(f"{time.time()-s:5.1f}s {url[:50]} -> {res['site_status'][:30]} {res['wa_number_e164']}", flush=True)
+                try:
+                    if not url:
+                        res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "no_site"}
+                    elif is_platform(url):
+                        res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "skipped_platform"}
+                    else:
+                        async with sem:
+                            s = time.time(); res = await process(crawler, url, region); timings.append(time.time()-s)
+                        print(f"{time.time()-s:5.1f}s {url[:50]} -> {res['site_status'][:30]} {res['wa_number_e164']}", flush=True)
+                except Exception as ex:                        # one bad site must not kill the other four
+                    res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "error: " + str(ex)[:80].replace("\n", " ")}
                 w.writerow({**row, **res}); f.flush()          # 每查完一个就写盘：中途停了不白查
             await asyncio.gather(*(one(r) for r in todo))
     print(f"own-site crawled: {len(timings)}, total {time.time()-t0:.0f}s, avg {sum(timings)/max(1,len(timings)):.1f}s/site")

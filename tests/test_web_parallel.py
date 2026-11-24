@@ -84,5 +84,26 @@ class A_ManySitesAtOnce(unittest.TestCase):
         self.assertEqual(len(rows), 3)
 
 
+    def test_one_site_raising_does_not_kill_the_others(self):
+        d = tempfile.mkdtemp(prefix="wat_web3_")
+        inp, out = os.path.join(d, "in.csv"), os.path.join(d, "out.csv")
+        write_in(inp, 4)
+        async def fake_process(crawler, url, region):
+            if url.endswith("site1.example"):
+                raise RuntimeError("browser page died")
+            return {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "ok"}
+        class FakeCrawler:
+            async def __aenter__(self): return self
+            async def __aexit__(self, *a): return False
+        with mock.patch.object(F, "AsyncWebCrawler", lambda config=None: FakeCrawler()), \
+             mock.patch.object(F, "process", fake_process), \
+             mock.patch.dict(os.environ, {"WAT_BROWSER_CHANNEL": "msedge"}):
+            asyncio.run(F.main(inp, out, "GB"))
+        rows = {r["place_id"]: r for r in csv.DictReader(open(out, encoding="utf-8"))}
+        self.assertEqual(len(rows), 4)                      # every business still gets a row
+        self.assertIn("browser page died", rows["p1"]["site_status"])
+        self.assertEqual(rows["p2"]["site_status"], "ok")
+
+
 if __name__ == "__main__":
     unittest.main()
