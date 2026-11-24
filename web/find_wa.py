@@ -1,6 +1,7 @@
 """Find WhatsApp numbers a business publishes on its own website (real browser via crawl4ai).
 Usage: python find_wa.py IN.csv OUT.csv [--region GB]
-Pages are rendered one at a time (weak CPU). Resume-safe: rows already in OUT.csv are skipped."""
+Pages are rendered a few at a time (WAT_WEB_CONCURRENCY, default 5) so one slow site cannot hold the rest.
+Resume-safe: rows already in OUT.csv are skipped."""
 import asyncio, csv, os, re, sys, time, html as htmlmod
 from urllib.parse import urlparse, urljoin, unquote
 import phonenumbers
@@ -151,21 +152,30 @@ async def main(inp, out, region="GB"):
     else:
         _use_installed_browser(exe)
         bc = BrowserConfig(headless=True, verbose=False)
+    # 11-24 客户：165 个网站 1 小时（68 个死在 30 秒超时上）。几个网站同时开，一个卡住不拖住后面。
+    conc = max(1, int(os.environ.get("WAT_WEB_CONCURRENCY", "5")))
+    sem = asyncio.Semaphore(conc)
+    todo = [r for r in rows if r["place_id"] not in done]
+    print(f"[website] {len(todo)} sites, {conc} at a time", flush=True)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields); w.writeheader()
+        for row in rows:                                       # already-checked sites keep their place in the file
+            if row["place_id"] in done:
+                w.writerow({k: done[row["place_id"]].get(k, "") for k in fields})
+        f.flush()
         async with AsyncWebCrawler(config=bc) as crawler:
-            for row in rows:
-                if row["place_id"] in done:
-                    w.writerow({k: done[row["place_id"]].get(k, "") for k in fields}); f.flush(); continue
+            async def one(row):
                 url = (row.get("website") or "").strip()
                 if not url:
                     res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "no_site"}
                 elif is_platform(url):
                     res = {"wa_number_e164": "", "wa_source_url": "", "wa_evidence": "", "site_status": "skipped_platform"}
                 else:
-                    s = time.time(); res = await process(crawler, url, region); timings.append(time.time()-s)
+                    async with sem:
+                        s = time.time(); res = await process(crawler, url, region); timings.append(time.time()-s)
                     print(f"{time.time()-s:5.1f}s {url[:50]} -> {res['site_status'][:30]} {res['wa_number_e164']}", flush=True)
-                w.writerow({**row, **res}); f.flush()
+                w.writerow({**row, **res}); f.flush()          # 每查完一个就写盘：中途停了不白查
+            await asyncio.gather(*(one(r) for r in todo))
     print(f"own-site crawled: {len(timings)}, total {time.time()-t0:.0f}s, avg {sum(timings)/max(1,len(timings)):.1f}s/site")
 
 if __name__ == "__main__":
