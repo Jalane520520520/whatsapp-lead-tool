@@ -183,7 +183,8 @@ def batch_left(d):
     try:
         if not C.summary(json.load(open(os.path.join(d, "progress.json"), encoding="utf-8")))["next_city"]: return None
     except (OSError, ValueError): return None
-    return {"want": int(b["want"]), "done": int(b["done"]), "left": left, "city": b.get("city") or "", "started": b.get("started", "")}
+    return {"want": int(b["want"]), "done": int(b["done"]), "left": left, "city": b.get("city") or "",
+            "started": b.get("started", ""), "note": b.get("note") or ""}
 
 
 @app.post("/start")

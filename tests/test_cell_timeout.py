@@ -73,6 +73,9 @@ class B_CrawlCell(unittest.TestCase):
 
 class C_RunStopsWhenTheNetworkIsGone(unittest.TestCase):
     def test_three_stalled_cells_end_the_run_and_still_export(self):
+        import json, shutil
+        d = P.C.data_dir("GB", ["kw"])
+        shutil.rmtree(d, ignore_errors=True)             # /resume scans every data folder: leave nothing behind
         calls, after = [], []
         def crawl(cell, kws, args, d, ids):
             calls.append(cell["id"])
@@ -86,10 +89,14 @@ class C_RunStopsWhenTheNetworkIsGone(unittest.TestCase):
         try:
             with self.assertRaises(SystemExit):
                 P.main()
+            b = json.load(open(os.path.join(d, "batch.json"), encoding="utf-8"))
         finally:
             P.crawl_cell, P.website_step, P.wa_step, P.build_excel, sys.argv = saved
+            shutil.rmtree(d, ignore_errors=True)
         self.assertEqual(len(calls), P.STALL_LIMIT)      # 8 asked, stopped after 3
         self.assertEqual(after, ["web"])                 # still exports what it has
+        self.assertFalse(b["maps_finished"])             # window offers 「继续抓取」 next time
+        self.assertIn("超过", b["note"])                  # ... and says why it stopped
 
 
 if __name__ == "__main__":

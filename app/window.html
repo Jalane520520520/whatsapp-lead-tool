@@ -138,7 +138,7 @@ function render(){
  else if(R&&R.total){h+=`<div class=card style="padding:0;margin-top:22px"><div style="display:flex;justify-content:space-between;align-items:center;padding:16px 18px">
   <span style="font-size:20px">结果 · ${R.wa.length} 个 WhatsApp <span class=small>/ 共 ${R.total} 家商家</span></span><span><button class=btn2 onclick=downloadCur()>下载 Excel</button> <button class=btn2 onclick=openCur()>打开 Excel</button></span></div>
   ${waRows(R.wa,200)||'<div class="row c">这张表还没有 WhatsApp 号码，再抓几格试试</div>'}</div>`}
- if(!running&&R&&R.batch) h=`<div class=card style="margin-top:22px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:18px">上次 ${R.batch.want} 格跑到第 ${R.batch.done} 格，继续剩下 ${R.batch.left} 格</span><button class=btn2 onclick=start(true)>继续抓取</button></div>`+h;
+ if(!running&&R&&R.batch) h=`<div class=card style="margin-top:22px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:18px">上次 ${R.batch.want} 格跑到第 ${R.batch.done} 格，继续剩下 ${R.batch.left} 格</span><button class=btn2 onclick=start(true)>继续抓取</button></div>${R.batch.note?`<div class=warn style="margin:12px 0 0">${esc(R.batch.note)}</div>`:''}</div>`+h;
  else if(S.me&&!running) h+=`<div class=card style="margin-top:22px;color:#5f6368">输入产品关键词，选国家，点「开始抓取」。点搜索框可以看到以前搜过的。</div>`;
  if(S.state=='done'&&S.locked) h=`<div class=warn>Excel 正在被打开，这次结果另存为：${esc(S.locked)}。关掉 Excel 后下次会写回原表。</div>`+h;
  if(S.state=='error') h=`<div class=warn>这次没跑完。已抓完的格子都已保存，再点一次会接着抓。</div>`+h;

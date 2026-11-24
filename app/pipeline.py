@@ -330,10 +330,12 @@ def main():
         if warn: warnings.append(f"{cell['id']}: {warn}")
         log(f"  -> {status}: {n_total} places, {len(new)} new, {time.time() - t0:.0f}s (master now {len(master_ids)})")
         if stalls >= STALL_LIMIT:
-            msg = (f"连着 {stalls} 格超过 {CELL_TIMEOUT} 秒都没抓到 —— 谷歌地图现在打不开（网络或 VPN 断了？）。"
-                   f"先停下，网络好了再点继续，会从 {cell['id']} 后面接着跑。")
-            log(msg); warnings.append(msg); break
-    batch["maps_finished"] = True; C.save_batch(d, batch)
+            msg = (f"连续 {stalls} 格超过 {CELL_TIMEOUT} 秒都没抓到 —— 谷歌地图现在打不开（网络或 VPN 断了？）。"
+                   f"先停下，网络好了再点「继续抓取」，会接着跑。")
+            log(msg); warnings.append(msg); batch["note"] = msg; break
+    if not batch.get("note"):                      # 正常跑完；停下了就不写，窗口才会给「继续抓取」
+        batch["maps_finished"] = True
+    C.save_batch(d, batch)
     website_step(d, args.country)
     rc = wa_step(d, args.skip_wa_check)
     stats = build_excel(args, d, prog, warnings)
