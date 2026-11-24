@@ -23,7 +23,7 @@ def run_pipeline(argv, stop_after=None):
     def crawl(cell, kws, args, d, ids):
         if stop_after is not None and calls["n"] >= stop_after: raise SystemExit("killed")
         calls["n"] += 1
-        return "done", [], 0, ""
+        return "done", [], 0, "", False
     saved = (P.crawl_cell, P.website_step, P.wa_step, P.build_excel, sys.argv)
     P.crawl_cell, P.website_step, P.wa_step = crawl, (lambda d, c: None), (lambda d, s: 0)
     P.build_excel = lambda *a: {}

@@ -4,7 +4,7 @@
 State lives in tool/data/<slug>/ (progress.json, master.csv, web_cache.csv, wa_cache.csv); a cell is saved the moment it finishes,
 so killing a run loses nothing that was finished. Never sends messages.
 """
-import argparse, csv, datetime, json, os, signal, subprocess, sys, time
+import argparse, csv, datetime, json, os, signal, subprocess, sys, threading, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cells as C
 
@@ -33,18 +33,28 @@ def _die(signum, frame):
     os._exit(130)
 
 
-def run_tee(cmd, cwd=None, quiet=False):
-    """Run in its own process group, echo output, return (returncode, browser-crash lines)."""
+def run_tee(cmd, cwd=None, quiet=False, timeout=None):
+    """Run in its own process group, echo output, return (returncode, browser-crash lines).
+    timeout (seconds): when it runs out the whole tree is killed and rc is -9. Without this a gosom whose
+    Google Maps page never loads waits forever: client 11-24 lost 10 of 12.5 h to 12 cells of 3–254 min."""
     global CHILD
     CHILD = p = subprocess.Popen(cmd, cwd=cwd, env=paths.child_env(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                  errors="replace", start_new_session=True, creationflags=proc.NO_WINDOW)
+    killed = []
+    def _bomb():
+        killed.append(True); log(f"  {timeout} 秒还没完，杀掉这一格")
+        proc.kill_tree(p.pid)
+    t = None
+    if timeout:
+        t = threading.Timer(timeout, _bomb); t.daemon = True; t.start()
     crashes = 0
     for line in p.stdout:
         if "SIGTRAP" in line or "Target page, context or browser has been closed" in line or "target closed" in line.lower():
             crashes += 1
         if not quiet or os.environ.get("WAT_VERBOSE"): print(line.rstrip()[:300], flush=True)
     rc = p.wait(); CHILD = None
-    return rc, crashes
+    if t: t.cancel()
+    return (-9 if killed else rc), crashes
 
 
 def read(path):
@@ -68,10 +78,18 @@ def first_num(s):
 
 
 # ---------------------------------------------------------------- step 1: maps, cell by cell
+# 11-24 客户：7-8 小时才 98 格，要快。客户电脑实测（327 格）：中位数 34 秒，28-48 秒是常态；12 格卡了 3-254 分钟，
+# 吃掉 12.5 小时里的 10 小时 —— 一格的谷歌地图打不开时 gosom 会一直等。所以一格最多 CELL_TIMEOUT 秒。
+CELL_TIMEOUT = int(os.environ.get("WAT_CELL_TIMEOUT", "180"))
+STALL_LIMIT = 3      # 连着 3 格都超时 = 网络/谷歌打不开，停下来，别把客户一下午耗掉
+
+
 def crawl_cell(cell, kws, args, d, master_ids):
-    """returns (status, rows_new_list, n_rows_total, warning). Retries a cell up to 3 times if Chromium crashed with 0 rows."""
+    """returns (status, rows_new_list, n_rows_total, warning, stalled). Retries a cell up to 3 times if Chromium
+    crashed with 0 rows. A cell that hits the time limit gets one more try, then keeps the rows it did get; with no
+    rows it stays not-done so a later run picks it up."""
     tmp = os.path.join(d, "tmp"); os.makedirs(tmp, exist_ok=True)
-    got, warn = {}, ""
+    got, warn, stalled = {}, "", False
     for kw_i, kw in enumerate(kws):
         out = os.path.join(tmp, f"cell_{kw_i}.csv")
         best, crash_left = None, 0
@@ -79,24 +97,31 @@ def crawl_cell(cell, kws, args, d, master_ids):
             if os.path.exists(out): os.remove(out)
             cmd = [PY, os.path.join(TOOL, "maps", "run_maps.py"), "--keyword", kw, "--country", args.country,
                    "--bbox", ",".join(map(str, cell["bbox"])), "--cell-km", str(C.CELL_KM), "--out", out]
-            rc, crashes = run_tee(cmd, cwd=os.path.join(TOOL, "maps"), quiet=True)
-            rows = read(out) if rc == 0 else None
+            rc, crashes = run_tee(cmd, cwd=os.path.join(TOOL, "maps"), quiet=True, timeout=CELL_TIMEOUT)
+            rows = read(out) if os.path.exists(out) else None    # gosom 边跑边写，被杀也留得住已抓到的
+            if rows: rows = [r for r in rows if r.get("place_id") or r.get("maps_link")]
             if rows is not None and (best is None or len(rows) > len(best)):
                 best, crash_left = rows, crashes
             if rc == 0 and (rows or crashes == 0):
                 break
+            if rc == -9:
+                stalled = True
+                if attempt >= 2: break                          # 卡住的格子只再试一次
             log(f"  retry '{kw}' (attempt {attempt}/3): exit={rc}, rows={len(rows) if rows is not None else '-'}, crashes={crashes}")
         if best is None or (not best and crash_left):
-            return "failed", [], 0, f"Chrome crashed on '{kw}'"
+            return "failed", [], 0, f"Chrome crashed on '{kw}'", stalled
+        if stalled and best: warn = f"这一格超过 {CELL_TIMEOUT} 秒，只拿到 {len(best)} 家"
         for r in best:
             got.setdefault(r["place_id"] or r["maps_link"], r)
         if crash_left: warn = f"Chrome crashed {crash_left}x on '{kw}' but rows were found"
+    if not got and stalled:
+        return "failed", [], 0, f"超过 {CELL_TIMEOUT} 秒没抓到（谷歌地图打不开？），下次再试", True
     new = []
     for k, r in got.items():
         if k in master_ids: continue
         master_ids.add(k)
         new.append(dict(r, place_id=r["place_id"] or k, city=cell["city"], cell_id=cell["id"]))
-    return "done", new, len(got), warn
+    return "done", new, len(got), warn, stalled
 
 
 # ---------------------------------------------------------------- step 2: websites (new businesses only)
@@ -289,10 +314,12 @@ def main():
         batch = {"want": args.cells, "done": 0, "city": args.city or "", "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     batch["maps_finished"] = False; C.save_batch(d, batch)
     warnings = []
+    stalls = 0
     for i, cell in enumerate(todo, 1):
         t0 = time.time()
         log(f"[maps {i}/{len(todo)}] {cell['id']} bbox={cell['bbox']}")
-        status, new, n_total, warn = crawl_cell(cell, kws, args, d, master_ids)
+        status, new, n_total, warn, stalled = crawl_cell(cell, kws, args, d, master_ids)
+        stalls = stalls + 1 if (stalled and status != "done") else 0
         if status == "done":
             if new: append_rows(master_p, MASTER_COLS, new)       # master first, then the ledger
         else:
@@ -302,6 +329,10 @@ def main():
         batch["done"] = int(batch.get("done", 0)) + 1; C.save_batch(d, batch)
         if warn: warnings.append(f"{cell['id']}: {warn}")
         log(f"  -> {status}: {n_total} places, {len(new)} new, {time.time() - t0:.0f}s (master now {len(master_ids)})")
+        if stalls >= STALL_LIMIT:
+            msg = (f"连着 {stalls} 格超过 {CELL_TIMEOUT} 秒都没抓到 —— 谷歌地图现在打不开（网络或 VPN 断了？）。"
+                   f"先停下，网络好了再点继续，会从 {cell['id']} 后面接着跑。")
+            log(msg); warnings.append(msg); break
     batch["maps_finished"] = True; C.save_batch(d, batch)
     website_step(d, args.country)
     rc = wa_step(d, args.skip_wa_check)
